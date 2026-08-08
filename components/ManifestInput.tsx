@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PRESET_MANIFESTS, PresetManifest } from "@/lib/presets";
-import { Play, Upload, Loader2 } from "lucide-react";
+import { Loader2, Play, Upload } from "lucide-react";
 
 interface ManifestInputProps {
   onAnalyze: (content: string, fileName: string) => void;
@@ -11,192 +11,119 @@ interface ManifestInputProps {
 
 export default function ManifestInput({ onAnalyze, isLoading }: ManifestInputProps) {
   const [selected, setSelected] = useState<PresetManifest>(PRESET_MANIFESTS[0]);
-  const [content, setContent]   = useState<string>(PRESET_MANIFESTS[0].content);
-  const [fileName, setFileName] = useState<string>(PRESET_MANIFESTS[0].fileName);
+  const [content, setContent]   = useState(PRESET_MANIFESTS[0].content);
+  const [fileName, setFileName] = useState(PRESET_MANIFESTS[0].fileName);
 
-  const handleSelectPreset = (preset: PresetManifest) => {
-    setSelected(preset);
-    setContent(preset.content);
-    setFileName(preset.fileName);
-  };
+  const pick = (p: PresetManifest) => { setSelected(p); setContent(p.content); setFileName(p.fileName); };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      if (evt.target?.result) setContent(evt.target.result as string);
-    };
-    reader.readAsText(file);
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFileName(f.name);
+    const r = new FileReader();
+    r.onload = (ev) => { if (ev.target?.result) setContent(ev.target.result as string); };
+    r.readAsText(f);
   };
 
   return (
-    <div className="animate-fade-up" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+    <div className="anim-up" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
-      {/* Ecosystem preset pills row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
-          marginBottom: 12,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--text-lo)",
-            marginRight: 4,
-          }}
-        >
-          Preset
-        </span>
-        {PRESET_MANIFESTS.map((preset) => {
-          const active = selected.id === preset.id;
-          return (
-            <button
-              key={preset.id}
-              onClick={() => handleSelectPreset(preset)}
-              style={{
-                padding: "4px 12px",
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: active ? 600 : 400,
-                background: active ? "var(--cyan-dim)" : "transparent",
-                color: active ? "var(--cyan)" : "var(--text-mid)",
-                border: active ? "1px solid rgba(34,211,238,0.25)" : "1px solid var(--border)",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-            >
-              {preset.name}
-            </button>
-          );
-        })}
+      {/* Preset row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <span className="text-label" style={{ marginRight: 4 }}>Preset</span>
+        {PRESET_MANIFESTS.map(p => (
+          <button
+            key={p.id}
+            onClick={() => pick(p)}
+            style={{
+              padding: "4px 12px",
+              borderRadius: "var(--r-sm)",
+              fontSize: 12,
+              fontWeight: selected.id === p.id ? 500 : 400,
+              background: selected.id === p.id ? "var(--surface-bd)" : "transparent",
+              color: selected.id === p.id ? "var(--t1)" : "var(--t3)",
+              border: selected.id === p.id ? "1px solid var(--bd-hi)" : "1px solid transparent",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "all 140ms",
+            }}
+          >
+            {p.name}
+          </button>
+        ))}
 
-        {/* Upload */}
         <label
           style={{
             marginLeft: "auto",
             display: "flex",
             alignItems: "center",
-            gap: 6,
+            gap: 5,
             padding: "4px 12px",
-            borderRadius: 999,
+            borderRadius: "var(--r-sm)",
             fontSize: 12,
-            color: "var(--text-mid)",
-            border: "1px solid var(--border)",
+            color: "var(--t3)",
+            border: "1px solid var(--bd)",
             cursor: "pointer",
-            transition: "all 0.15s ease",
+            transition: "all 140ms",
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "var(--text-hi)";
-            (e.currentTarget as HTMLElement).style.borderColor = "var(--border-hi)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "var(--text-mid)";
-            (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
-          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; }}
         >
-          <Upload size={11} />
+          <Upload size={10} />
           Upload
-          <input
-            type="file"
-            accept=".json,.txt,.toml,.lock"
-            onChange={handleFileUpload}
-            style={{ display: "none" }}
-          />
+          <input type="file" accept=".json,.txt,.toml,.lock" onChange={handleUpload} style={{ display: "none" }} />
         </label>
       </div>
 
-      {/* Code editor card */}
-      <div
-        className="card"
-        style={{ overflow: "hidden" }}
-      >
-        {/* Editor header bar */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "8px 14px",
-            borderBottom: "1px solid var(--border)",
-            background: "rgba(255,255,255,0.015)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Traffic lights */}
-            {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
-              <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.7 }} />
-            ))}
-            <span
-              style={{
-                fontFamily: "var(--font-geist-mono), monospace",
-                fontSize: 11,
-                color: "var(--text-lo)",
-                marginLeft: 6,
-              }}
-            >
-              {fileName}
-            </span>
-          </div>
-          <span
-            style={{
-              fontFamily: "var(--font-geist-mono), monospace",
-              fontSize: 10,
-              color: "var(--text-lo)",
-            }}
-          >
-            {content.split("\n").length} lines
-          </span>
+      {/* Editor */}
+      <div className="surface" style={{ overflow: "hidden" }}>
+
+        {/* Title bar */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "10px 14px",
+          borderBottom: "1px solid var(--bd)",
+        }}>
+          {/* Traffic lights */}
+          {["#ff5f57", "#febc2e", "#28c840"].map(c => (
+            <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.6 }} />
+          ))}
+          <span className="text-caption" style={{ marginLeft: 8 }}>{fileName}</span>
+          <span className="text-caption" style={{ marginLeft: "auto" }}>{content.split("\n").length} lines</span>
         </div>
 
-        {/* Textarea */}
+        {/* Code area */}
         <textarea
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={e => setContent(e.target.value)}
           rows={10}
-          className="code-textarea"
-          placeholder="Paste package.json or requirements.txt here..."
+          className="code-area"
+          placeholder="Paste package.json or requirements.txt…"
+          spellCheck={false}
         />
 
-        {/* Footer with CTA */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "12px 16px",
-            borderTop: "1px solid var(--border)",
-            background: "rgba(255,255,255,0.015)",
-          }}
-        >
-          <span style={{ fontSize: 11, color: "var(--text-lo)" }}>
+        {/* Footer */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 14px",
+          borderTop: "1px solid var(--bd)",
+        }}>
+          <span className="text-caption">
             Bright Data Scraper Studio · {PRESET_MANIFESTS.length} ecosystems
           </span>
-
           <button
+            className="btn btn-primary"
             onClick={() => onAnalyze(content, fileName)}
             disabled={isLoading || !content.trim()}
-            className="btn-primary"
           >
-            {isLoading ? (
-              <>
-                <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
-                <span>Analyzing…</span>
-              </>
-            ) : (
-              <>
-                <Play size={14} style={{ fill: "#080808" }} />
-                <span>Calculate Blast Radius</span>
-              </>
-            )}
+            {isLoading
+              ? <><Loader2 size={13} className="anim-spin" />Analyzing…</>
+              : <><Play size={12} style={{ fill: "#0a0a0a" }} />Calculate Blast Radius</>
+            }
           </button>
         </div>
       </div>

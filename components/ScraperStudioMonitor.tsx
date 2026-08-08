@@ -3,23 +3,14 @@
 import { FullBlastRadiusAnalysis } from "@/lib/types";
 import { Terminal, ExternalLink, RefreshCw, CheckCircle2, Activity } from "lucide-react";
 
-interface ScraperStudioMonitorProps {
-  analysis: FullBlastRadiusAnalysis | null;
-}
-
-export default function ScraperStudioMonitor({ analysis }: ScraperStudioMonitorProps) {
+export default function ScraperStudioMonitor({ analysis }: { analysis: FullBlastRadiusAnalysis | null }) {
   if (!analysis) {
     return (
-      <div
-        className="card animate-fade-up"
-        style={{ padding: "64px 32px", textAlign: "center" }}
-      >
-        <Terminal size={28} color="var(--text-lo)" style={{ margin: "0 auto 16px" }} />
-        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-hi)", marginBottom: 6 }}>
-          No active scrapers
-        </div>
-        <div style={{ fontSize: 13, color: "var(--text-lo)", maxWidth: 400, margin: "0 auto" }}>
-          Run an analysis from the Blast Dashboard to launch Bright Data collectors.
+      <div className="surface anim-up" style={{ padding: "64px 32px", textAlign: "center" }}>
+        <Terminal size={24} color="var(--t3)" style={{ margin: "0 auto 14px" }} />
+        <div className="text-title" style={{ marginBottom: 5 }}>No active scrapers</div>
+        <div className="text-body" style={{ maxWidth: 360, margin: "0 auto" }}>
+          Run an analysis from the Dashboard to launch Bright Data collectors.
         </div>
       </div>
     );
@@ -28,197 +19,107 @@ export default function ScraperStudioMonitor({ analysis }: ScraperStudioMonitorP
   const { reports, selfHealingSummary } = analysis;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
-      {/* Summary bar */}
-      <div
-        className="card animate-fade-up"
-        style={{ padding: "20px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}
-      >
+      {/* Summary */}
+      <div className="surface anim-up" style={{ padding: "20px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-hi)", marginBottom: 2 }}>
-            Bright Data Scraper Studio
-          </div>
-          <div style={{ fontSize: 11, color: "var(--text-lo)" }}>
-            Self-healing collector deployment · Into the Scrape-Verse Hackathon
-          </div>
+          <div className="text-title" style={{ marginBottom: 3 }}>Bright Data Scraper Studio</div>
+          <div className="text-body" style={{ fontSize: 12 }}>Self-healing collector deployment · Into the Scrape-Verse</div>
         </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 24 }}>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontFamily: "var(--font-geist-mono), monospace", fontSize: 20, fontWeight: 800, letterSpacing: "-0.04em", color: "var(--text-hi)" }}>
+            <div className="text-mono" style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.04em", color: "var(--t1)", lineHeight: 1 }}>
               {selfHealingSummary.totalScrapersDeployed}
             </div>
-            <div style={{ fontSize: 10, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Deployed</div>
+            <div className="text-label" style={{ marginTop: 4 }}>Deployed</div>
           </div>
-          <div style={{ width: 1, height: 36, background: "var(--border)" }} />
+          <div style={{ width: 1, background: "var(--bd)" }} />
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontFamily: "var(--font-geist-mono), monospace", fontSize: 20, fontWeight: 800, letterSpacing: "-0.04em", color: "var(--amber)" }}>
+            <div className="text-mono" style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.04em", color: "var(--amber)", lineHeight: 1 }}>
               {selfHealingSummary.healedScraperCount}
             </div>
-            <div style={{ fontSize: 10, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Self-Healed</div>
+            <div className="text-label" style={{ marginTop: 4 }}>Self-Healed</div>
           </div>
         </div>
       </div>
 
-      {/* Self-healing explanation — minimal callout */}
-      <div
-        className="animate-fade-up stagger-1"
-        style={{
-          padding: "14px 20px",
-          borderRadius: 10,
-          borderLeft: "2px solid var(--cyan)",
-          background: "rgba(34,211,238,0.03)",
-          fontSize: 12,
-          color: "var(--text-mid)",
-          lineHeight: 1.65,
-        }}
-      >
-        <strong style={{ color: "var(--text-hi)", fontWeight: 600 }}>Why self-healing matters:</strong> Doc sites (GitHub Releases, Docusaurus, Sphinx) change HTML structure silently. Standard scrapers break quietly. Bright Data Scraper Studio detects selector failures, regenerates a schema envelope, and heals the collector in-place — zero manual maintenance.
+      {/* Explanation */}
+      <div className="anim-up d-1" style={{ paddingLeft: 14, borderLeft: "2px solid var(--bd-hi)" }}>
+        <p className="text-body" style={{ fontSize: 12 }}>
+          <strong style={{ color: "var(--t1)" }}>Why self-healing matters:</strong> Doc sites change HTML structure silently. Static scrapers break quietly. Bright Data Scraper Studio detects selector failures, regenerates a schema envelope, and heals in-place — zero manual maintenance.
+        </p>
       </div>
 
       {/* Collector grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-          gap: 12,
-        }}
-      >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
         {reports.map((report, i) => {
           const { dependency, collectorStatus, scrapedReleases } = report;
           const release = scrapedReleases[0];
           const healed = collectorStatus.status === "healed";
 
           return (
-            <div
-              key={dependency.name}
-              className="card animate-fade-up"
-              style={{ padding: "18px 20px", animationDelay: `${i * 0.05}s` }}
-            >
-              {/* Collector header */}
+            <div key={dependency.name} className={`surface anim-up d-${Math.min(i + 1, 8)}`} style={{ padding: "18px 20px" }}>
+
+              {/* Header */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-0.02em" }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--t1)", marginBottom: 2 }}>
                     {dependency.name}
                   </div>
-                  <div
-                    style={{
-                      fontFamily: "var(--font-geist-mono), monospace",
-                      fontSize: 10,
-                      color: "var(--text-lo)",
-                      marginTop: 2,
-                    }}
-                  >
-                    {dependency.ecosystem}
-                  </div>
+                  <div className="text-caption">{dependency.ecosystem}</div>
                 </div>
-                {healed ? (
-                  <span className="pill pill-amber">
-                    <RefreshCw size={9} />
-                    Healed
-                  </span>
-                ) : (
-                  <span className="pill pill-emerald">
-                    <CheckCircle2 size={9} />
-                    Healthy
-                  </span>
-                )}
+                {healed
+                  ? <span className="badge badge-high"><RefreshCw size={9} /> Healed</span>
+                  : <span className="badge badge-safe"><CheckCircle2 size={9} /> Healthy</span>
+                }
               </div>
 
-              {/* Details table */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {/* Details */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 7, borderTop: "1px solid var(--bd)", paddingTop: 12 }}>
                 {[
-                  { key: "Collector ID",    val: collectorStatus.collectorId,   mono: true, accent: "var(--cyan)" },
-                  { key: "Fields extracted", val: `${collectorStatus.fieldsExtracted} fields`, mono: true },
-                ].map(({ key, val, mono, accent }) => (
-                  <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 10, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{key}</span>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontFamily: mono ? "var(--font-geist-mono), monospace" : undefined,
-                        color: accent ?? "var(--text-mid)",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {val}
-                    </span>
+                  ["Collector ID", collectorStatus.collectorId, "var(--cyan)"],
+                  ["Fields", `${collectorStatus.fieldsExtracted} extracted`, null],
+                ].map(([k, v, color]) => (
+                  <div key={k as string} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span className="text-label">{k}</span>
+                    <span className="text-mono" style={{ fontSize: 11, color: (color as string) ?? "var(--t2)", fontWeight: 500 }}>{v}</span>
                   </div>
                 ))}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 10, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Target URL</span>
+                  <span className="text-label">URL</span>
                   <a
                     href={collectorStatus.scrapedUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 3,
-                      fontSize: 11,
-                      fontFamily: "var(--font-geist-mono), monospace",
-                      color: "var(--text-lo)",
-                      textDecoration: "none",
-                      maxWidth: 200,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      transition: "color 0.15s",
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--cyan)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-lo)"; }}
+                    className="text-caption"
+                    style={{ display: "flex", alignItems: "center", gap: 3, textDecoration: "none", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 140ms" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; }}
                   >
-                    {collectorStatus.scrapedUrl}
-                    <ExternalLink size={9} style={{ flexShrink: 0 }} />
+                    {collectorStatus.scrapedUrl} <ExternalLink size={9} style={{ flexShrink: 0 }} />
                   </a>
                 </div>
               </div>
 
               {/* Heal envelope */}
               {release?.healEnvelope && (
-                <div
-                  style={{
-                    marginTop: 14,
-                    paddingTop: 14,
-                    borderTop: "1px solid var(--border)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--bd)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
                     <Activity size={11} color="var(--amber)" />
-                    <span style={{ fontSize: 10, fontWeight: 600, color: "var(--amber)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      Self-Heal Envelope
-                    </span>
+                    <span className="text-label" style={{ color: "var(--amber)" }}>Self-Heal Envelope</span>
                   </div>
-                  <p
-                    style={{
-                      fontFamily: "var(--font-geist-mono), monospace",
-                      fontSize: 10.5,
-                      color: "var(--text-mid)",
-                      lineHeight: 1.6,
-                      marginBottom: 10,
-                    }}
-                  >
+                  <p className="text-mono" style={{ fontSize: 11, color: "var(--t2)", lineHeight: 1.6, marginBottom: 10 }}>
                     "{release.healEnvelope.reason}"
                   </p>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                     {[
-                      { label: "Original schema", val: release.healEnvelope.originalSchema.join(", "), accent: "var(--text-lo)" },
-                      { label: "Healed schema", val: release.healEnvelope.healedSchema.slice(3).join(", "), accent: "var(--cyan)" },
-                    ].map(({ label, val, accent }) => (
-                      <div
-                        key={label}
-                        style={{
-                          padding: "8px 10px",
-                          borderRadius: 7,
-                          background: "rgba(255,255,255,0.025)",
-                        }}
-                      >
-                        <div style={{ fontSize: 9, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>
-                          {label}
-                        </div>
-                        <div style={{ fontSize: 10, fontFamily: "var(--font-geist-mono), monospace", color: accent, lineHeight: 1.5 }}>
-                          {val}
-                        </div>
+                      ["Original", release.healEnvelope.originalSchema.join(", "), "var(--t3)"],
+                      ["Healed", release.healEnvelope.healedSchema.slice(3).join(", "), "var(--cyan)"],
+                    ].map(([label, val, color]) => (
+                      <div key={label as string} style={{ padding: "8px 10px", borderRadius: "var(--r-sm)", background: "rgba(255 255 255 / 0.03)" }}>
+                        <div className="text-label" style={{ marginBottom: 4 }}>{label}</div>
+                        <div className="text-mono" style={{ fontSize: 10, color: color as string, lineHeight: 1.5 }}>{val}</div>
                       </div>
                     ))}
                   </div>
