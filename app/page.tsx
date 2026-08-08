@@ -9,7 +9,7 @@ import ScraperStudioMonitor from "@/components/ScraperStudioMonitor";
 import ReportExporter from "@/components/ReportExporter";
 import { DependencyRiskReport, FullBlastRadiusAnalysis } from "@/lib/types";
 import { PRESET_MANIFESTS } from "@/lib/presets";
-import { Sparkles, Terminal, ShieldAlert, Cpu } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"analysis" | "scraper-monitor" | "report">("analysis");
@@ -17,34 +17,30 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedCitationReport, setSelectedCitationReport] = useState<DependencyRiskReport | null>(null);
 
-  // Auto-run default preset analysis on initial load
   useEffect(() => {
     handleRunAnalysis(PRESET_MANIFESTS[0].content, PRESET_MANIFESTS[0].fileName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRunAnalysis = async (content: string, fileName: string) => {
     setIsLoading(true);
     try {
-      // Step 1: Parse manifest
       const parseRes = await fetch("/api/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, fileName }),
       });
       const parsedData = await parseRes.json();
-
       if (!parseRes.ok || !parsedData.dependencies) {
         throw new Error(parsedData.error || "Failed to parse manifest");
       }
 
-      // Step 2: Run Scraper Studio & Blast Radius Engine
       const analyzeRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dependencies: parsedData.dependencies }),
       });
       const analyzeData = await analyzeRes.json();
-
       if (!analyzeRes.ok || !analyzeData.analysis) {
         throw new Error(analyzeData.error || "Failed to analyze dependencies");
       }
@@ -57,13 +53,12 @@ export default function Home() {
     }
   };
 
-  const healedCount = analysis?.selfHealingSummary.healedScraperCount || 0;
+  const healedCount    = analysis?.selfHealingSummary.healedScraperCount || 0;
   const totalBreakings = analysis?.totalBreakingChanges || 0;
 
   return (
-    <div className="min-h-screen flex flex-col pb-16">
-      
-      {/* Top Header Navbar */}
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -71,78 +66,108 @@ export default function Home() {
         totalBreakings={totalBreakings}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 pt-8 space-y-8">
-        
-        {/* Tab 1: Analysis Dashboard */}
+      <main
+        style={{
+          flex: 1,
+          maxWidth: 1200,
+          width: "100%",
+          margin: "0 auto",
+          padding: "40px 24px 64px",
+        }}
+      >
+
         {activeTab === "analysis" && (
-          <div className="space-y-8 animate-in fade-in duration-300">
-            
-            {/* Hero / Intro Banner */}
-            <div className="glass-panel rounded-2xl p-6 md:p-8 border border-slate-800/90 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-              <div className="max-w-3xl space-y-2 relative">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Bright Data Hackathon Project</span>
-                </div>
+          <div className="animate-fade-up" style={{ display: "flex", flexDirection: "column", gap: 32 }}>
 
-                <h1 className="text-2xl md:text-4xl font-extrabold text-white tracking-tight">
-                  Discover What Breaks <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400">Before You Upgrade</span>
-                </h1>
-
-                <p className="text-xs md:text-sm text-slate-300 leading-relaxed">
-                  Point it at any <code className="font-mono text-cyan-300 bg-slate-900 px-1.5 py-0.5 rounded">package.json</code> or <code className="font-mono text-cyan-300 bg-slate-900 px-1.5 py-0.5 rounded">requirements.txt</code>. 
-                  Bright Data Scraper Studio automatically harvests release notes, changelogs, and migration guides across unpredictable web layouts — self-healing in real time when sites redesign.
-                </p>
+            {/* Hero headline */}
+            <div style={{ maxWidth: 600 }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "3px 10px",
+                  borderRadius: 999,
+                  background: "var(--cyan-dim)",
+                  border: "1px solid rgba(34,211,238,0.2)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--cyan)",
+                  marginBottom: 16,
+                  letterSpacing: "0.03em",
+                }}
+              >
+                <span className="live-dot" style={{ width: 5, height: 5 }} />
+                Into the Scrape-Verse Hackathon
               </div>
+              <h1
+                style={{
+                  fontSize: "clamp(26px, 4vw, 40px)",
+                  fontWeight: 800,
+                  letterSpacing: "-0.04em",
+                  lineHeight: 1.1,
+                  color: "var(--text-hi)",
+                  marginBottom: 14,
+                }}
+              >
+                Know what breaks
+                <br />
+                <span className="text-gradient-cyan">before you upgrade.</span>
+              </h1>
+              <p style={{ fontSize: 14, color: "var(--text-mid)", lineHeight: 1.7, maxWidth: 480 }}>
+                Point it at any{" "}
+                <code className="code-tag">package.json</code> or{" "}
+                <code className="code-tag">requirements.txt</code>. Bright Data Scraper Studio scrapes release notes and changelogs across self-healing layouts — then maps every breaking change to your code.
+              </p>
             </div>
 
-            {/* Manifest Input Component */}
-            <ManifestInput
-              onAnalyze={handleRunAnalysis}
-              isLoading={isLoading}
-            />
+            {/* Manifest input */}
+            <ManifestInput onAnalyze={handleRunAnalysis} isLoading={isLoading} />
 
-            {/* Loading Indicator */}
+            {/* Loading state */}
             {isLoading && (
-              <div className="glass-panel rounded-2xl p-12 text-center border border-cyan-500/30 animate-pulse space-y-3">
-                <div className="w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto" />
-                <h3 className="text-base font-bold text-white">Deploying Bright Data Collectors...</h3>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              <div
+                className="card animate-fade-up"
+                style={{ padding: "48px 32px", textAlign: "center" }}
+              >
+                <Loader2
+                  size={24}
+                  color="var(--cyan)"
+                  style={{ margin: "0 auto 14px", animation: "spin 1s linear infinite" }}
+                />
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-hi)", marginBottom: 6 }}>
+                  Deploying Bright Data Collectors…
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-lo)" }}>
                   Scraping GitHub Releases, PyPI, and custom doc sites. Self-healing schema envelopes active.
-                </p>
+                </div>
               </div>
             )}
 
-            {/* Blast Risk Matrix */}
+            {/* Results */}
             {!isLoading && analysis && (
               <BlastMatrix
                 analysis={analysis}
                 onOpenCitation={(report) => setSelectedCitationReport(report)}
               />
             )}
-
           </div>
         )}
 
-        {/* Tab 2: Bright Data Scraper Studio Control Room */}
         {activeTab === "scraper-monitor" && (
-          <div className="animate-in fade-in duration-300">
+          <div className="animate-fade-in">
             <ScraperStudioMonitor analysis={analysis} />
           </div>
         )}
 
-        {/* Tab 3: Upgrade Safety Report Exporter */}
         {activeTab === "report" && (
-          <div className="animate-in fade-in duration-300">
+          <div className="animate-fade-in">
             <ReportExporter analysis={analysis} />
           </div>
         )}
 
       </main>
 
-      {/* Citation Drawer Modal */}
       <CitationDrawer
         report={selectedCitationReport}
         onClose={() => setSelectedCitationReport(null)}

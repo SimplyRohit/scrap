@@ -1,7 +1,8 @@
 "use client";
 
 import { DependencyRiskReport } from "@/lib/types";
-import { X, ExternalLink, ShieldAlert, Sparkles, FileText, Code2, ArrowRight, CheckCircle2, Quote } from "lucide-react";
+import { X, ExternalLink, ArrowRight, ChevronDown } from "lucide-react";
+import { useEffect } from "react";
 
 interface CitationDrawerProps {
   report: DependencyRiskReport | null;
@@ -9,172 +10,315 @@ interface CitationDrawerProps {
 }
 
 export default function CitationDrawer({ report, onClose }: CitationDrawerProps) {
+  // Close on Escape
+  useEffect(() => {
+    if (!report) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [report, onClose]);
+
   if (!report) return null;
 
-  const { dependency, breakingChanges, scrapedReleases, collectorStatus } = report;
+  const { dependency, breakingChanges, collectorStatus } = report;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex justify-end transition-opacity animate-in fade-in">
-      <div className="w-full max-w-2xl bg-slate-950 border-l border-slate-800 h-full overflow-y-auto p-6 md:p-8 flex flex-col justify-between shadow-2xl relative">
-        
-        <div>
-          {/* Header */}
-          <div className="flex items-start justify-between gap-4 pb-6 border-b border-slate-800">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
-                  {dependency.ecosystem}
-                </span>
-                <h2 className="text-xl font-bold text-white">
-                  {dependency.name}
-                </h2>
-              </div>
-
-              <div className="flex items-center gap-2 mt-2 text-xs font-mono text-slate-400">
-                <span>Current: v{dependency.currentVersion}</span>
-                <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-cyan-300 font-bold">Target: v{dependency.targetVersion}</span>
-              </div>
-            </div>
-
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Collector & Source Citation Info */}
-          <div className="my-6 p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                Bright Data Collector ID:
+    <div
+      className="animate-fade-in"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        display: "flex",
+        justifyContent: "flex-end",
+        background: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(6px)",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      {/* Drawer panel */}
+      <div
+        className="animate-fade-up"
+        style={{
+          width: "100%",
+          maxWidth: 600,
+          height: "100%",
+          background: "var(--bg-card)",
+          borderLeft: "1px solid var(--border)",
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: "24px 28px 20px",
+            borderBottom: "1px solid var(--border)",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            position: "sticky",
+            top: 0,
+            background: "var(--bg-card)",
+            zIndex: 1,
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-geist-mono), monospace",
+                  fontSize: 10,
+                  color: "var(--text-lo)",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {dependency.ecosystem}
               </span>
-              <span className="font-mono text-cyan-300 font-bold">{collectorStatus.collectorId}</span>
             </div>
-
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Target Scraped URL:</span>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                letterSpacing: "-0.03em",
+                color: "var(--text-hi)",
+                marginBottom: 6,
+              }}
+            >
+              {dependency.name}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: "var(--font-geist-mono), monospace", fontSize: 12, color: "var(--text-lo)" }}>
+                v{dependency.currentVersion}
+              </span>
+              <ArrowRight size={11} color="var(--text-lo)" />
+              <span style={{ fontFamily: "var(--font-geist-mono), monospace", fontSize: 12, color: "var(--cyan)", fontWeight: 600 }}>
+                v{dependency.targetVersion}
+              </span>
               <a
                 href={collectorStatus.scrapedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-cyan-400 hover:underline flex items-center gap-1 font-mono text-[11px]"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                  fontSize: 11,
+                  color: "var(--text-lo)",
+                  textDecoration: "none",
+                  marginLeft: 8,
+                  transition: "color 0.15s",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--cyan)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-lo)"; }}
               >
-                <span>{collectorStatus.scrapedUrl}</span>
-                <ExternalLink className="w-3 h-3" />
+                Source
+                <ExternalLink size={10} />
               </a>
             </div>
-
-            {collectorStatus.status === "healed" && (
-              <div className="mt-2 text-[11px] text-amber-300 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-                ⚡ <strong>Self-Healed:</strong> Collector schema automatically updated fields to adapt to target page redesign.
-              </div>
-            )}
           </div>
-
-          {/* Breaking Changes List */}
-          <div className="space-y-6">
-            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-rose-400" />
-              <span>Extracted Breaking Changes ({breakingChanges.length})</span>
-            </h3>
-
-            {breakingChanges.length === 0 ? (
-              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>No breaking API modifications detected in scraped documentation.</span>
-              </div>
-            ) : (
-              breakingChanges.map((item, idx) => (
-                <div key={item.id} className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-4">
-                  
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center text-xs font-bold font-mono">
-                        {idx + 1}
-                      </span>
-                      <h4 className="text-sm font-bold text-white">
-                        {item.title}
-                      </h4>
-                    </div>
-
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                      item.severity === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    }`}>
-                      {item.severity}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    {item.description}
-                  </p>
-
-                  {/* Code Migration Snippets */}
-                  {(item.beforeSnippet || item.afterSnippet) && (
-                    <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                      <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
-                        <Code2 className="w-3.5 h-3.5 text-cyan-400" />
-                        Code Transformation Migration:
-                      </span>
-                      
-                      <div className="grid grid-cols-1 gap-2 text-xs font-mono">
-                        {item.beforeSnippet && (
-                          <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/20 text-rose-200">
-                            <span className="text-[10px] text-rose-400 block mb-1 font-sans font-bold">BEFORE (v{dependency.currentVersion})</span>
-                            <pre className="whitespace-pre-wrap">{item.beforeSnippet}</pre>
-                          </div>
-                        )}
-                        {item.afterSnippet && (
-                          <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/20 text-emerald-200">
-                            <span className="text-[10px] text-emerald-400 block mb-1 font-sans font-bold">AFTER (v{dependency.targetVersion})</span>
-                            <pre className="whitespace-pre-wrap">{item.afterSnippet}</pre>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Direct Citation Box */}
-                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1.5">
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span className="font-semibold text-cyan-400 flex items-center gap-1 text-[11px]">
-                        <Quote className="w-3 h-3 text-cyan-400" />
-                        Direct Scraped Citation:
-                      </span>
-                      <a
-                        href={item.citation.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:underline flex items-center gap-1 text-[11px] text-slate-400 hover:text-cyan-300 font-mono"
-                      >
-                        <span>{item.citation.title}</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                    <p className="text-[11px] text-slate-300 italic bg-slate-900/60 p-2 rounded border border-slate-800/60">
-                      "{item.citation.quotedText}"
-                    </p>
-                  </div>
-
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="pt-6 border-t border-slate-800 mt-8 flex justify-end">
           <button
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-colors"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: "var(--bg-hover)",
+              border: "1px solid var(--border)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--text-mid)",
+              flexShrink: 0,
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-hi)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-mid)"; }}
           >
-            Close Drawer
+            <X size={15} />
           </button>
         </div>
 
+        {/* Collector info */}
+        <div
+          style={{
+            padding: "14px 28px",
+            borderBottom: "1px solid var(--border)",
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+          }}
+        >
+          <span style={{ fontSize: 10, color: "var(--text-lo)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            Bright Data Collector
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-geist-mono), monospace",
+              fontSize: 11,
+              color: "var(--cyan)",
+              fontWeight: 600,
+            }}
+          >
+            {collectorStatus.collectorId}
+          </span>
+          {collectorStatus.status === "healed" && (
+            <span className="pill pill-amber" style={{ marginLeft: "auto" }}>⚡ Self-Healed</span>
+          )}
+        </div>
+
+        {/* Breaking changes */}
+        <div style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 24 }}>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.07em",
+              textTransform: "uppercase",
+              color: "var(--text-lo)",
+            }}
+          >
+            Breaking Changes · {breakingChanges.length}
+          </div>
+
+          {breakingChanges.length === 0 ? (
+            <div
+              style={{
+                padding: "20px",
+                borderRadius: 12,
+                background: "var(--emerald-dim)",
+                border: "1px solid rgba(52,211,153,0.15)",
+                fontSize: 13,
+                color: "var(--emerald)",
+              }}
+            >
+              ✓ No breaking API changes detected in scraped release notes.
+            </div>
+          ) : (
+            breakingChanges.map((item, idx) => (
+              <div
+                key={item.id}
+                className="animate-fade-up"
+                style={{ animationDelay: `${idx * 0.06}s`, display: "flex", flexDirection: "column", gap: 12 }}
+              >
+                {/* Title row */}
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <span
+                      style={{
+                        fontFamily: "var(--font-geist-mono), monospace",
+                        fontSize: 11,
+                        color: "var(--text-lo)",
+                        marginTop: 2,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {String(idx + 1).padStart(2, "0")}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-0.015em" }}>
+                      {item.title}
+                    </span>
+                  </div>
+                  <span
+                    className={`pill ${item.severity === "CRITICAL" ? "pill-rose" : "pill-amber"}`}
+                    style={{ flexShrink: 0 }}
+                  >
+                    {item.severity}
+                  </span>
+                </div>
+
+                {/* Description */}
+                <p style={{ fontSize: 13, color: "var(--text-mid)", lineHeight: 1.65, paddingLeft: 28 }}>
+                  {item.description}
+                </p>
+
+                {/* Code migration */}
+                {(item.beforeSnippet || item.afterSnippet) && (
+                  <div style={{ paddingLeft: 28, display: "flex", flexDirection: "column", gap: 8 }}>
+                    {item.beforeSnippet && (
+                      <div>
+                        <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--rose)", marginBottom: 5, fontWeight: 600 }}>
+                          Before · v{dependency.currentVersion}
+                        </div>
+                        <pre className="code-block" style={{ color: "var(--rose)", background: "rgba(251,113,133,0.04)", borderColor: "rgba(251,113,133,0.12)" }}>
+                          {item.beforeSnippet}
+                        </pre>
+                      </div>
+                    )}
+                    {item.afterSnippet && (
+                      <div>
+                        <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--emerald)", marginBottom: 5, fontWeight: 600 }}>
+                          After · v{dependency.targetVersion}
+                        </div>
+                        <pre className="code-block" style={{ color: "var(--emerald)", background: "rgba(52,211,153,0.04)", borderColor: "rgba(52,211,153,0.12)" }}>
+                          {item.afterSnippet}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Citation */}
+                <div
+                  style={{
+                    paddingLeft: 28,
+                    padding: "10px 12px 10px 28px",
+                    borderLeft: "2px solid var(--border-hi)",
+                    marginLeft: 0,
+                  }}
+                >
+                  <div style={{ fontSize: 11, color: "var(--text-lo)", fontStyle: "italic", lineHeight: 1.6, marginBottom: 4 }}>
+                    "{item.citation.quotedText}"
+                  </div>
+                  <a
+                    href={item.citation.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      fontSize: 10,
+                      color: "var(--text-lo)",
+                      textDecoration: "none",
+                      transition: "color 0.15s",
+                      fontFamily: "var(--font-geist-mono), monospace",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--cyan)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-lo)"; }}
+                  >
+                    {item.citation.title}
+                    <ExternalLink size={9} />
+                  </a>
+                </div>
+
+                {/* Divider between items */}
+                {idx < breakingChanges.length - 1 && (
+                  <div style={{ height: 1, background: "var(--border)", marginTop: 4 }} />
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            padding: "16px 28px",
+            borderTop: "1px solid var(--border)",
+            display: "flex",
+            justifyContent: "flex-end",
+            marginTop: "auto",
+          }}
+        >
+          <button className="btn-secondary" onClick={onClose}>
+            Close · Esc
+          </button>
+        </div>
       </div>
     </div>
   );

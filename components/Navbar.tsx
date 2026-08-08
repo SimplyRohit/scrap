@@ -1,110 +1,122 @@
 "use client";
 
-import { Activity, ShieldAlert, Sparkles, Terminal, Database, Cpu } from "lucide-react";
+import { ShieldAlert, Activity } from "lucide-react";
+
+type Tab = "analysis" | "scraper-monitor" | "report";
 
 interface NavbarProps {
-  activeTab: "analysis" | "scraper-monitor" | "report";
-  setActiveTab: (tab: "analysis" | "scraper-monitor" | "report") => void;
+  activeTab: Tab;
+  setActiveTab: (tab: Tab) => void;
   healedCount: number;
   totalBreakings: number;
 }
 
+const TABS: { id: Tab; label: string }[] = [
+  { id: "analysis",        label: "Blast Dashboard" },
+  { id: "scraper-monitor", label: "Scraper Monitor" },
+  { id: "report",          label: "Upgrade Report"  },
+];
+
 export default function Navbar({ activeTab, setActiveTab, healedCount, totalBreakings }: NavbarProps) {
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-800/80 px-4 lg:px-8 py-3.5">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-        
-        {/* Brand & Title */}
-        <div className="flex items-center gap-3">
-          <div className="relative p-2.5 rounded-xl bg-gradient-to-tr from-blue-600 via-cyan-500 to-indigo-600 shadow-lg shadow-cyan-500/20">
-            <ShieldAlert className="w-6 h-6 text-white" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
+    <header
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 40,
+        background: "rgba(8,8,8,0.88)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderBottom: "1px solid var(--border)",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "0 24px",
+          height: 56,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+        }}
+      >
+        {/* Brand */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              background: "var(--cyan-dim)",
+              border: "1px solid rgba(34,211,238,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
+            }}
+          >
+            <ShieldAlert size={14} color="var(--cyan)" />
+            <span className="live-dot" style={{ position: "absolute", top: -3, right: -3 }} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                Dependency Blast Radius
-              </h1>
-              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                Hackathon Prototype
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-              <span>Powered by</span>
-              <span className="font-semibold text-slate-200 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-400 fill-amber-400" />
-                Bright Data Scraper Studio
-              </span>
-              <span>•</span>
-              <span className="text-slate-400">Into the Scrape-Verse</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Live Scraper Status Indicators */}
-        <div className="flex items-center gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800/80">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono text-slate-300">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            <span
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "var(--text-hi)",
+                letterSpacing: "-0.025em",
+                lineHeight: 1,
+              }}
+            >
+              Blast Radius
             </span>
-            <span>CLI Engine Active</span>
+            <div
+              style={{
+                fontSize: 10,
+                color: "var(--text-lo)",
+                fontFamily: "var(--font-geist-mono), monospace",
+                marginTop: 2,
+              }}
+            >
+              Bright Data · Into the Scrape-Verse
+            </div>
           </div>
-
-          {healedCount > 0 && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <Activity className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-              <span>{healedCount} Self-Healed Scrapers</span>
-            </div>
-          )}
-
-          {totalBreakings > 0 && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
-              <span>{totalBreakings} Breaks Detected</span>
-            </div>
-          )}
         </div>
 
-        {/* Navigation Tabs */}
-        <nav className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
-          <button
-            onClick={() => setActiveTab("analysis")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              activeTab === "analysis"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-            }`}
-          >
-            <Cpu className="w-3.5 h-3.5" />
-            <span>Blast Dashboard</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("scraper-monitor")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              activeTab === "scraper-monitor"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-            }`}
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            <span>Scraper Control Room</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("report")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              activeTab === "report"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-            }`}
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>Upgrade Report</span>
-          </button>
+        {/* Center Tabs */}
+        <nav className="tab-root" style={{ flex: "0 0 auto" }}>
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`tab-item ${activeTab === tab.id ? "tab-item-active" : ""}`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </nav>
 
+        {/* Right status pills */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {totalBreakings > 0 && (
+            <span className="pill pill-rose animate-fade-in">
+              <ShieldAlert size={10} />
+              {totalBreakings} breaks
+            </span>
+          )}
+          {healedCount > 0 && (
+            <span className="pill pill-amber animate-fade-in">
+              <Activity size={10} />
+              {healedCount} healed
+            </span>
+          )}
+          <span className="pill pill-emerald">
+            <span className="live-dot" style={{ width: 5, height: 5 }} />
+            Live
+          </span>
+        </div>
       </div>
     </header>
   );

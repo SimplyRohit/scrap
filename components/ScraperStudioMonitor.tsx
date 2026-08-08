@@ -1,7 +1,7 @@
 "use client";
 
 import { FullBlastRadiusAnalysis } from "@/lib/types";
-import { Terminal, Sparkles, CheckCircle2, Shield, RefreshCw, Cpu, ExternalLink, Activity } from "lucide-react";
+import { Terminal, ExternalLink, RefreshCw, CheckCircle2, Activity } from "lucide-react";
 
 interface ScraperStudioMonitorProps {
   analysis: FullBlastRadiusAnalysis | null;
@@ -10,12 +10,17 @@ interface ScraperStudioMonitorProps {
 export default function ScraperStudioMonitor({ analysis }: ScraperStudioMonitorProps) {
   if (!analysis) {
     return (
-      <div className="glass-panel rounded-2xl p-12 text-center border border-slate-800">
-        <Terminal className="w-12 h-12 text-slate-600 mx-auto mb-3 animate-pulse" />
-        <h3 className="text-lg font-bold text-white mb-1">Scraper Control Room Inactive</h3>
-        <p className="text-xs text-slate-400 max-w-md mx-auto">
-          Run an analysis from the Blast Dashboard to launch Bright Data Scraper Studio collectors and observe self-healing events in real time.
-        </p>
+      <div
+        className="card animate-fade-up"
+        style={{ padding: "64px 32px", textAlign: "center" }}
+      >
+        <Terminal size={28} color="var(--text-lo)" style={{ margin: "0 auto 16px" }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-hi)", marginBottom: 6 }}>
+          No active scrapers
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text-lo)", maxWidth: 400, margin: "0 auto" }}>
+          Run an analysis from the Blast Dashboard to launch Bright Data collectors.
+        </div>
       </div>
     );
   }
@@ -23,142 +28,202 @@ export default function ScraperStudioMonitor({ analysis }: ScraperStudioMonitorP
   const { reports, selfHealingSummary } = analysis;
 
   return (
-    <div className="space-y-6">
-      
-      {/* Top Monitor Header */}
-      <div className="glass-panel rounded-2xl p-6 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+
+      {/* Summary bar */}
+      <div
+        className="card animate-fade-up"
+        style={{ padding: "20px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}
+      >
         <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-              <Terminal className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                Bright Data Scraper Studio Control Room
-              </h2>
-              <p className="text-xs text-slate-400">
-                Live deployment status, collector schema envelopes, and self-healing layout adaptation stream.
-              </p>
-            </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-hi)", marginBottom: 2 }}>
+            Bright Data Scraper Studio
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-lo)" }}>
+            Self-healing collector deployment · Into the Scrape-Verse Hackathon
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <div className="bg-slate-900 px-4 py-2 rounded-xl border border-slate-800 text-xs">
-            <span className="text-slate-400 block text-[10px] uppercase font-mono">Collectors Deployed</span>
-            <span className="text-base font-bold text-white">{selfHealingSummary.totalScrapersDeployed}</span>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontFamily: "var(--font-geist-mono), monospace", fontSize: 20, fontWeight: 800, letterSpacing: "-0.04em", color: "var(--text-hi)" }}>
+              {selfHealingSummary.totalScrapersDeployed}
+            </div>
+            <div style={{ fontSize: 10, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Deployed</div>
           </div>
-
-          <div className="bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-xl text-xs">
-            <span className="text-amber-400 block text-[10px] uppercase font-mono">Self-Healed</span>
-            <span className="text-base font-bold text-amber-300">{selfHealingSummary.healedScraperCount} Schema Heals</span>
+          <div style={{ width: 1, height: 36, background: "var(--border)" }} />
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontFamily: "var(--font-geist-mono), monospace", fontSize: 20, fontWeight: 800, letterSpacing: "-0.04em", color: "var(--amber)" }}>
+              {selfHealingSummary.healedScraperCount}
+            </div>
+            <div style={{ fontSize: 10, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Self-Healed</div>
           </div>
         </div>
       </div>
 
-      {/* Self-Healing Architecture Explanation Banner */}
-      <div className="glass-panel rounded-2xl p-5 border border-blue-500/20 bg-blue-950/20 relative overflow-hidden">
-        <div className="flex items-start gap-3">
-          <Sparkles className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-slate-300 space-y-1">
-            <h4 className="font-bold text-white flex items-center gap-2">
-              Why Self-Healing Scraping is Crucial for Changelogs
-            </h4>
-            <p className="text-slate-300 leading-relaxed">
-              Developer documentation sites (GitHub Releases, Docusaurus, MkDocs, Sphinx, custom blogs) change HTML class names and layout structures constantly. Standard static scrapers break quietly. 
-              <strong> Bright Data Scraper Studio</strong> detects selector failures, generates a new schema envelope, and heals the collector in place — ensuring continuous breaking change monitoring without manual maintenance.
-            </p>
-          </div>
-        </div>
+      {/* Self-healing explanation — minimal callout */}
+      <div
+        className="animate-fade-up stagger-1"
+        style={{
+          padding: "14px 20px",
+          borderRadius: 10,
+          borderLeft: "2px solid var(--cyan)",
+          background: "rgba(34,211,238,0.03)",
+          fontSize: 12,
+          color: "var(--text-mid)",
+          lineHeight: 1.65,
+        }}
+      >
+        <strong style={{ color: "var(--text-hi)", fontWeight: 600 }}>Why self-healing matters:</strong> Doc sites (GitHub Releases, Docusaurus, Sphinx) change HTML structure silently. Standard scrapers break quietly. Bright Data Scraper Studio detects selector failures, regenerates a schema envelope, and heals the collector in-place — zero manual maintenance.
       </div>
 
-      {/* Scraper Collector Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {reports.map((report) => {
+      {/* Collector grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+          gap: 12,
+        }}
+      >
+        {reports.map((report, i) => {
           const { dependency, collectorStatus, scrapedReleases } = report;
           const release = scrapedReleases[0];
+          const healed = collectorStatus.status === "healed";
 
           return (
             <div
               key={dependency.name}
-              className="glass-panel rounded-2xl p-5 border border-slate-800/90 space-y-4 font-mono text-xs"
+              className="card animate-fade-up"
+              style={{ padding: "18px 20px", animationDelay: `${i * 0.05}s` }}
             >
-              
-              {/* Collector Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <div className="flex items-center gap-2 font-sans">
-                  <Cpu className="w-4 h-4 text-cyan-400" />
-                  <span className="font-bold text-white text-sm">{dependency.name}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+              {/* Collector header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-0.02em" }}>
+                    {dependency.name}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "var(--font-geist-mono), monospace",
+                      fontSize: 10,
+                      color: "var(--text-lo)",
+                      marginTop: 2,
+                    }}
+                  >
                     {dependency.ecosystem}
-                  </span>
+                  </div>
                 </div>
-
-                {collectorStatus.status === "healed" ? (
-                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold font-sans bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                    <RefreshCw className="w-3 h-3 text-amber-400 animate-spin" />
-                    SELF-HEALED
+                {healed ? (
+                  <span className="pill pill-amber">
+                    <RefreshCw size={9} />
+                    Healed
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold font-sans bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                    HEALTHY
+                  <span className="pill pill-emerald">
+                    <CheckCircle2 size={9} />
+                    Healthy
                   </span>
                 )}
               </div>
 
-              {/* Collector Details */}
-              <div className="space-y-1.5 text-slate-300">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400">Collector ID:</span>
-                  <span className="text-cyan-300 font-bold">{collectorStatus.collectorId}</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400">Target Doc URL:</span>
+              {/* Details table */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {[
+                  { key: "Collector ID",    val: collectorStatus.collectorId,   mono: true, accent: "var(--cyan)" },
+                  { key: "Fields extracted", val: `${collectorStatus.fieldsExtracted} fields`, mono: true },
+                ].map(({ key, val, mono, accent }) => (
+                  <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 10, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{key}</span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontFamily: mono ? "var(--font-geist-mono), monospace" : undefined,
+                        color: accent ?? "var(--text-mid)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {val}
+                    </span>
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 10, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Target URL</span>
                   <a
                     href={collectorStatus.scrapedUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-slate-400 hover:text-cyan-400 flex items-center gap-1 text-[11px] truncate max-w-[240px]"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 3,
+                      fontSize: 11,
+                      fontFamily: "var(--font-geist-mono), monospace",
+                      color: "var(--text-lo)",
+                      textDecoration: "none",
+                      maxWidth: 200,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      transition: "color 0.15s",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--cyan)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-lo)"; }}
                   >
-                    <span>{collectorStatus.scrapedUrl}</span>
-                    <ExternalLink className="w-3 h-3 shrink-0" />
+                    {collectorStatus.scrapedUrl}
+                    <ExternalLink size={9} style={{ flexShrink: 0 }} />
                   </a>
-                </div>
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400">Extracted Fields:</span>
-                  <span className="text-emerald-400 font-bold">{collectorStatus.fieldsExtracted} fields</span>
                 </div>
               </div>
 
-              {/* Self-Healing Envelope Details (If Healed) */}
+              {/* Heal envelope */}
               {release?.healEnvelope && (
-                <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-500/30 space-y-2 font-sans">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-amber-400 flex items-center gap-1">
-                      <Activity className="w-3.5 h-3.5 text-amber-400" />
-                      Self-Heal Approval Envelope
+                <div
+                  style={{
+                    marginTop: 14,
+                    paddingTop: 14,
+                    borderTop: "1px solid var(--border)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <Activity size={11} color="var(--amber)" />
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "var(--amber)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Self-Heal Envelope
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">STATUS: DONE</span>
                   </div>
-
-                  <p className="text-[11px] text-slate-300 leading-relaxed font-mono bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <p
+                    style={{
+                      fontFamily: "var(--font-geist-mono), monospace",
+                      fontSize: 10.5,
+                      color: "var(--text-mid)",
+                      lineHeight: 1.6,
+                      marginBottom: 10,
+                    }}
+                  >
                     "{release.healEnvelope.reason}"
                   </p>
-
-                  <div className="grid grid-cols-2 gap-2 text-[10px] font-mono pt-1">
-                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
-                      <span className="text-slate-400 block mb-1">ORIGINAL SCHEMA</span>
-                      <span className="text-slate-300">{release.healEnvelope.originalSchema.join(", ")}</span>
-                    </div>
-                    <div className="p-2 rounded bg-cyan-950/40 border border-cyan-500/30">
-                      <span className="text-cyan-300 block mb-1">HEALED EXPANDED SCHEMA</span>
-                      <span className="text-cyan-200">{release.healEnvelope.healedSchema.slice(3).join(", ")}</span>
-                    </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    {[
+                      { label: "Original schema", val: release.healEnvelope.originalSchema.join(", "), accent: "var(--text-lo)" },
+                      { label: "Healed schema", val: release.healEnvelope.healedSchema.slice(3).join(", "), accent: "var(--cyan)" },
+                    ].map(({ label, val, accent }) => (
+                      <div
+                        key={label}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 7,
+                          background: "rgba(255,255,255,0.025)",
+                        }}
+                      >
+                        <div style={{ fontSize: 9, color: "var(--text-lo)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>
+                          {label}
+                        </div>
+                        <div style={{ fontSize: 10, fontFamily: "var(--font-geist-mono), monospace", color: accent, lineHeight: 1.5 }}>
+                          {val}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
-
             </div>
           );
         })}

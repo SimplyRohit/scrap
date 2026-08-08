@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FullBlastRadiusAnalysis } from "@/lib/types";
-import { Download, Copy, Check, FileText, Database, ShieldAlert, Sparkles } from "lucide-react";
+import { Download, Copy, Check, FileText } from "lucide-react";
 import confetti from "canvas-confetti";
 
 interface ReportExporterProps {
@@ -14,52 +14,49 @@ export default function ReportExporter({ analysis }: ReportExporterProps) {
 
   if (!analysis) {
     return (
-      <div className="glass-panel rounded-2xl p-12 text-center border border-slate-800">
-        <FileText className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-        <h3 className="text-lg font-bold text-white mb-1">No Upgrade Report Generated</h3>
-        <p className="text-xs text-slate-400 max-w-md mx-auto">
-          Run an analysis on your manifest to generate a Markdown Upgrade Blast Radius report with full citations.
-        </p>
+      <div className="card animate-fade-up" style={{ padding: "64px 32px", textAlign: "center" }}>
+        <FileText size={28} color="var(--text-lo)" style={{ margin: "0 auto 16px" }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-hi)", marginBottom: 6 }}>
+          No report yet
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text-lo)", maxWidth: 360, margin: "0 auto" }}>
+          Run an analysis to generate a full Markdown upgrade safety report with citations.
+        </div>
       </div>
     );
   }
 
   const generateMarkdownReport = (): string => {
     let md = `# 💥 Dependency Blast Radius Upgrade Safety Report\n\n`;
-    md += `**Generated At**: ${new Date(analysis.createdAt).toLocaleString()}\n`;
-    md += `**Target Ecosystem**: ${analysis.ecosystem.toUpperCase()}\n`;
-    md += `**Overall Safety Rating**: **${analysis.overallSafetyRating.replace(/_/g, " ")}**\n`;
-    md += `**Total Dependencies Analyzed**: ${analysis.totalDependencies}\n`;
-    md += `**Total Breaking Changes**: ${analysis.totalBreakingChanges} (Critical: ${analysis.criticalCount}, High: ${analysis.highCount}, Medium: ${analysis.mediumCount})\n`;
-    md += `**Bright Data Self-Healed Scrapers**: ${analysis.selfHealingSummary.healedScraperCount} / ${analysis.selfHealingSummary.totalScrapersDeployed}\n\n`;
-
-    md += `---\n\n## 📊 Dependency Break Breakdown & Scraped Citations\n\n`;
+    md += `**Generated**: ${new Date(analysis.createdAt).toLocaleString()}\n`;
+    md += `**Ecosystem**: ${analysis.ecosystem.toUpperCase()}\n`;
+    md += `**Safety Rating**: ${analysis.overallSafetyRating.replace(/_/g, " ")}\n`;
+    md += `**Dependencies**: ${analysis.totalDependencies}\n`;
+    md += `**Breaking Changes**: ${analysis.totalBreakingChanges} (Critical: ${analysis.criticalCount}, High: ${analysis.highCount}, Medium: ${analysis.mediumCount})\n`;
+    md += `**Bright Data Self-Healed**: ${analysis.selfHealingSummary.healedScraperCount} / ${analysis.selfHealingSummary.totalScrapersDeployed}\n\n---\n\n`;
 
     for (const r of analysis.reports) {
       const { dependency, riskLevel, overallRiskScore, breakingChanges, collectorStatus } = r;
-      md += `### 📦 \`${dependency.name}\` (v${dependency.currentVersion} ➔ v${dependency.targetVersion})\n`;
-      md += `- **Risk Score**: ${overallRiskScore}/100 (${riskLevel})\n`;
-      md += `- **Bright Data Collector**: \`${collectorStatus.collectorId}\` (Status: ${collectorStatus.status})\n`;
-      md += `- **Scraped Release Docs**: [${collectorStatus.scrapedUrl}](${collectorStatus.scrapedUrl})\n\n`;
+      md += `## \`${dependency.name}\` v${dependency.currentVersion} → v${dependency.targetVersion}\n\n`;
+      md += `- **Risk**: ${overallRiskScore}/100 (${riskLevel})\n`;
+      md += `- **Collector**: \`${collectorStatus.collectorId}\` · ${collectorStatus.status}\n`;
+      md += `- **Scraped**: [${collectorStatus.scrapedUrl}](${collectorStatus.scrapedUrl})\n\n`;
 
       if (breakingChanges.length === 0) {
-        md += `> ✅ **No breaking API changes detected in scraped release notes.**\n\n`;
+        md += `> ✅ No breaking API changes detected.\n\n`;
       } else {
-        md += `#### Breaking Changes & Code Migrations:\n\n`;
         for (const b of breakingChanges) {
-          md += `##### 🚨 [${b.severity}] ${b.title}\n`;
-          md += `${b.description}\n\n`;
+          md += `### [${b.severity}] ${b.title}\n\n${b.description}\n\n`;
           if (b.beforeSnippet && b.afterSnippet) {
-            md += `\`\`\`diff\n// BEFORE (v${dependency.currentVersion})\n${b.beforeSnippet}\n\n// AFTER (v${dependency.targetVersion})\n${b.afterSnippet}\n\`\`\`\n\n`;
+            md += `\`\`\`diff\n// BEFORE\n${b.beforeSnippet}\n\n// AFTER\n${b.afterSnippet}\n\`\`\`\n\n`;
           }
-          md += `> 📌 **Scraped Citation**: "${b.citation.quotedText}"\n`;
-          md += `> 🔗 Source: [${b.citation.title}](${b.citation.url})\n\n`;
+          md += `> 📌 "${b.citation.quotedText}"\n> Source: [${b.citation.title}](${b.citation.url})\n\n`;
         }
       }
       md += `---\n\n`;
     }
 
-    md += `\n*Report synthesized via Bright Data Scraper Studio & AI Blast Radius Analyzer for Into the Scrape-Verse Hackathon.*\n`;
+    md += `*Generated via Bright Data Scraper Studio · Into the Scrape-Verse Hackathon*\n`;
     return md;
   };
 
@@ -77,56 +74,90 @@ export default function ReportExporter({ analysis }: ReportExporterProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `dependency-blast-radius-report-${analysis.ecosystem}.md`;
+    a.download = `blast-radius-${analysis.ecosystem}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="space-y-6">
-      
-      {/* Top Action Header */}
-      <div className="glass-panel rounded-2xl p-6 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* Actions row */}
+      <div
+        className="animate-fade-up"
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+      >
         <div>
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <FileText className="w-5 h-5 text-cyan-400" />
-            Exportable Blast Radius Safety Report
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Complete GitHub Flavored Markdown report with breaking change diffs and direct URL citations.
-          </p>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-hi)", marginBottom: 2 }}>
+            Upgrade Safety Report
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-lo)" }}>
+            GitHub Flavored Markdown · full citations · diff snippets
+          </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-semibold transition-all"
-          >
-            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
-            <span>{copied ? "Copied Report!" : "Copy Markdown"}</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-secondary" onClick={handleCopy} style={{ gap: 6 }}>
+            {copied ? <Check size={13} color="var(--emerald)" /> : <Copy size={13} />}
+            {copied ? "Copied!" : "Copy"}
           </button>
-
-          <button
-            onClick={handleDownload}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:opacity-95 text-white text-xs font-bold transition-all shadow-lg shadow-cyan-500/20"
-          >
-            <Download className="w-4 h-4" />
-            <span>Download .md File</span>
+          <button className="btn-primary" onClick={handleDownload}>
+            <Download size={13} />
+            Download .md
           </button>
         </div>
       </div>
 
-      {/* Markdown Preview Terminal */}
-      <div className="glass-panel rounded-2xl border border-slate-800 bg-slate-950/90 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 bg-slate-900/80 border-b border-slate-800 text-xs font-mono text-slate-400">
-          <span className="flex items-center gap-2">
-            <Database className="w-4 h-4 text-cyan-400" />
-            dependency-blast-radius-report.md
+      {/* Preview */}
+      <div className="card animate-fade-up stagger-1" style={{ overflow: "hidden" }}>
+        {/* Editor chrome */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 14px",
+            borderBottom: "1px solid var(--border)",
+            background: "rgba(255,255,255,0.015)",
+          }}
+        >
+          {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
+            <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.7 }} />
+          ))}
+          <span
+            style={{
+              fontFamily: "var(--font-geist-mono), monospace",
+              fontSize: 11,
+              color: "var(--text-lo)",
+              marginLeft: 8,
+            }}
+          >
+            blast-radius-{analysis.ecosystem}.md
           </span>
-          <span className="text-[11px] text-emerald-400 font-semibold">GFM Formatted</span>
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: 10,
+              color: "var(--emerald)",
+              fontFamily: "var(--font-geist-mono), monospace",
+            }}
+          >
+            GFM
+          </span>
         </div>
-
-        <pre className="p-6 text-xs font-mono text-slate-300 leading-relaxed overflow-x-auto whitespace-pre-wrap max-h-[600px] overflow-y-auto">
+        <pre
+          style={{
+            padding: "20px 20px",
+            fontFamily: "var(--font-geist-mono), monospace",
+            fontSize: 11.5,
+            lineHeight: 1.7,
+            color: "var(--text-mid)",
+            overflowX: "auto",
+            whiteSpace: "pre-wrap",
+            maxHeight: 560,
+            overflowY: "auto",
+            margin: 0,
+          }}
+        >
           {markdownText}
         </pre>
       </div>
