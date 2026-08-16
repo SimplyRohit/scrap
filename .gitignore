@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# upgrade-intel knowledge index and fetch cache
+.upgrade-intel/

@@ -5,17 +5,17 @@ type Tab = "analysis" | "scraper-monitor" | "report";
 interface NavbarProps {
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
-  healedCount: number;
+  sourceCount: number;
   totalBreakings: number;
 }
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "analysis",        label: "Dashboard" },
-  { id: "scraper-monitor", label: "Scrapers" },
+  { id: "scraper-monitor", label: "Sources" },
   { id: "report",          label: "Report" },
 ];
 
-export default function Navbar({ activeTab, setActiveTab, healedCount, totalBreakings }: NavbarProps) {
+export default function Navbar({ activeTab, setActiveTab, sourceCount, totalBreakings }: NavbarProps) {
   return (
     <header style={{
       position: "sticky",
@@ -70,9 +70,9 @@ export default function Navbar({ activeTab, setActiveTab, healedCount, totalBrea
               {totalBreakings} breaks
             </span>
           )}
-          {healedCount > 0 && (
+          {sourceCount > 0 && (
             <span style={{ fontSize: 12, color: "var(--t3)" }}>
-              {healedCount} healed
+              {sourceCount} source{sourceCount === 1 ? "" : "s"}
             </span>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>

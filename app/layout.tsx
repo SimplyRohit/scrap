@@ -13,10 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dependency Blast Radius — Bright Data Hackathon",
+  title: "Dependency Blast Radius",
   description:
-    "Discover exactly what breaks before you upgrade. Powered by Bright Data Scraper Studio with self-healing layout detection.",
-  keywords: ["dependency", "upgrade", "blast radius", "Bright Data", "scraper", "package.json"],
+    "See what breaks before you upgrade. Researches every dependency against its official changelogs, release notes, and migration guides, and cites the sentence behind each finding.",
+  keywords: ["dependency", "upgrade", "blast radius", "breaking changes", "migration", "package.json"],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

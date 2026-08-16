@@ -45,7 +45,7 @@ export default function BlastMatrix({ analysis, onOpenCitation }: BlastMatrixPro
         {[
           { label: "Safety", value: safetyLabel, sub: `${analysis.totalDependencies} deps`, color: safetyColor },
           { label: "Breaking Changes", value: analysis.totalBreakingChanges, sub: `${analysis.criticalCount} critical · ${analysis.highCount} high`, color: analysis.totalBreakingChanges > 0 ? "var(--rose)" : "var(--t1)" },
-          { label: "Self-Healed", value: analysis.selfHealingSummary.healedScraperCount, sub: `of ${analysis.selfHealingSummary.totalScrapersDeployed} scrapers`, color: "var(--amber)" },
+          { label: "Sources Read", value: analysis.researchSummary.totalSourcesFetched, sub: `${analysis.researchSummary.unlockedSourceCount} via unlocker`, color: "var(--amber)" },
           { label: "Ecosystem", value: analysis.ecosystem.toUpperCase(), sub: "Live scraping", color: "var(--cyan)" },
         ].map(({ label, value, sub, color }, i) => (
           <div key={label} className={`anim-up d-${i + 1}`}

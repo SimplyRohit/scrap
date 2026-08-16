@@ -1,135 +1,170 @@
 "use client";
 
-import { FullBlastRadiusAnalysis } from "@/lib/types";
-import { Terminal, ExternalLink, RefreshCw, CheckCircle2, Activity } from "lucide-react";
+import { FullBlastRadiusAnalysis, SourceTransport } from "@/lib/types";
+import { Terminal, ExternalLink, Database, Globe, Shield, AlertTriangle } from "lucide-react";
+
+const TRANSPORT_LABEL: Record<SourceTransport, { label: string; color: string; icon: typeof Globe }> = {
+  brightdata: { label: "Unlocker", color: "var(--amber)", icon: Shield },
+  direct:     { label: "Direct",   color: "var(--cyan)",  icon: Globe },
+  cache:      { label: "Cache",    color: "var(--green)", icon: Database },
+};
 
 export default function ScraperStudioMonitor({ analysis }: { analysis: FullBlastRadiusAnalysis | null }) {
   if (!analysis) {
     return (
       <div className="surface anim-up" style={{ padding: "64px 32px", textAlign: "center" }}>
         <Terminal size={24} color="var(--t3)" style={{ margin: "0 auto 14px" }} />
-        <div className="text-title" style={{ marginBottom: 5 }}>No active scrapers</div>
+        <div className="text-title" style={{ marginBottom: 5 }}>No research yet</div>
         <div className="text-body" style={{ maxWidth: 360, margin: "0 auto" }}>
-          Run an analysis from the Dashboard to launch Bright Data collectors.
+          Run an analysis from the Dashboard to see which sources were read and what was extracted from each.
         </div>
       </div>
     );
   }
 
-  const { reports, selfHealingSummary } = analysis;
+  const { reports, researchSummary } = analysis;
+
+  const stats: [string, number, string][] = [
+    ["Sources read", researchSummary.totalSourcesFetched, "var(--t1)"],
+    ["Via unlocker", researchSummary.unlockedSourceCount, "var(--amber)"],
+    ["From cache", researchSummary.cacheHits, "var(--green)"],
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
       {/* Summary */}
-      <div className="surface anim-up" style={{ padding: "20px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="surface anim-up" style={{ padding: "20px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <div className="text-title" style={{ marginBottom: 3 }}>Bright Data Scraper Studio</div>
-          <div className="text-body" style={{ fontSize: 12 }}>Self-healing collector deployment · Into the Scrape-Verse</div>
+          <div className="text-title" style={{ marginBottom: 3 }}>Research trace</div>
+          <div className="text-body" style={{ fontSize: 12 }}>
+            Sources planned by authority · fetched via Bright Data or directly · normalized into claims
+          </div>
         </div>
         <div style={{ display: "flex", gap: 24 }}>
-          <div style={{ textAlign: "right" }}>
-            <div className="text-mono" style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.04em", color: "var(--t1)", lineHeight: 1 }}>
-              {selfHealingSummary.totalScrapersDeployed}
+          {stats.map(([label, value, color], i) => (
+            <div key={label} style={{ display: "flex", gap: 24 }}>
+              {i > 0 && <div style={{ width: 1, background: "var(--bd)" }} />}
+              <div style={{ textAlign: "right" }}>
+                <div className="text-mono" style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.04em", color, lineHeight: 1 }}>
+                  {value}
+                </div>
+                <div className="text-label" style={{ marginTop: 4 }}>{label}</div>
+              </div>
             </div>
-            <div className="text-label" style={{ marginTop: 4 }}>Deployed</div>
-          </div>
-          <div style={{ width: 1, background: "var(--bd)" }} />
-          <div style={{ textAlign: "right" }}>
-            <div className="text-mono" style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.04em", color: "var(--amber)", lineHeight: 1 }}>
-              {selfHealingSummary.healedScraperCount}
-            </div>
-            <div className="text-label" style={{ marginTop: 4 }}>Self-Healed</div>
-          </div>
+          ))}
         </div>
       </div>
 
       {/* Explanation */}
       <div className="anim-up d-1" style={{ paddingLeft: 14, borderLeft: "2px solid var(--bd-hi)" }}>
         <p className="text-body" style={{ fontSize: 12 }}>
-          <strong style={{ color: "var(--t1)" }}>Why self-healing matters:</strong> Doc sites change HTML structure silently. Static scrapers break quietly. Bright Data Scraper Studio detects selector failures, regenerates a schema envelope, and heals in-place — zero manual maintenance.
+          <strong style={{ color: "var(--t1)" }}>How sources are chosen:</strong> the engine ranks candidates by
+          authority — official migration guides and changelogs before release notes, registries before community
+          posts — and reads them in that order until the document budget is spent. Documentation hosts that block
+          automated requests are retrieved through the Bright Data unlocker; registries and APIs are fetched
+          directly. A fresh cached copy is reused rather than re-fetched.
         </p>
       </div>
 
-      {/* Collector grid */}
+      {/* Per-package source cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
         {reports.map((report, i) => {
-          const { dependency, collectorStatus, scrapedReleases } = report;
-          const release = scrapedReleases[0];
-          const healed = collectorStatus.status === "healed";
+          const { dependency, research, sources } = report;
 
           return (
             <div key={dependency.name} className={`surface anim-up d-${Math.min(i + 1, 8)}`} style={{ padding: "18px 20px" }}>
 
               {/* Header */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 8 }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--t1)", marginBottom: 2 }}>
                     {dependency.name}
                   </div>
                   <div className="text-caption">{dependency.ecosystem}</div>
                 </div>
-                {healed
-                  ? <span className="badge badge-high"><RefreshCw size={9} /> Healed</span>
-                  : <span className="badge badge-safe"><CheckCircle2 size={9} /> Healthy</span>
+                {research.servedFromIndex
+                  ? <span className="badge badge-safe"><Database size={9} /> Indexed</span>
+                  : <span className="badge badge-safe">{research.sourcesFetched} source{research.sourcesFetched === 1 ? "" : "s"}</span>
                 }
               </div>
 
-              {/* Details */}
+              {/* Counts */}
               <div style={{ display: "flex", flexDirection: "column", gap: 7, borderTop: "1px solid var(--bd)", paddingTop: 12 }}>
-                {[
-                  ["Collector ID", collectorStatus.collectorId, "var(--cyan)"],
-                  ["Fields", `${collectorStatus.fieldsExtracted} extracted`, null],
-                ].map(([k, v, color]) => (
-                  <div key={k as string} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span className="text-label">{k}</span>
-                    <span className="text-mono" style={{ fontSize: 11, color: (color as string) ?? "var(--t2)", fontWeight: 500 }}>{v}</span>
+                <Row label="Claims indexed" value={`${research.knowledgeExtracted}`} />
+                {research.failures > 0 && (
+                  <Row label="Fetch failures" value={`${research.failures}`} color="var(--amber)" />
+                )}
+                {research.primaryUrl && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <span className="text-label">Primary</span>
+                    <a
+                      href={research.primaryUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-caption"
+                      style={{ display: "flex", alignItems: "center", gap: 3, textDecoration: "none", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 140ms" }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; }}
+                    >
+                      {research.primaryUrl} <ExternalLink size={9} style={{ flexShrink: 0 }} />
+                    </a>
                   </div>
-                ))}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span className="text-label">URL</span>
-                  <a
-                    href={collectorStatus.scrapedUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-caption"
-                    style={{ display: "flex", alignItems: "center", gap: 3, textDecoration: "none", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 140ms" }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; }}
-                  >
-                    {collectorStatus.scrapedUrl} <ExternalLink size={9} style={{ flexShrink: 0 }} />
-                  </a>
-                </div>
+                )}
               </div>
 
-              {/* Heal envelope */}
-              {release?.healEnvelope && (
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--bd)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
-                    <Activity size={11} color="var(--amber)" />
-                    <span className="text-label" style={{ color: "var(--amber)" }}>Self-Heal Envelope</span>
-                  </div>
-                  <p className="text-mono" style={{ fontSize: 11, color: "var(--t2)", lineHeight: 1.6, marginBottom: 10 }}>
-                    "{release.healEnvelope.reason}"
-                  </p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                    {[
-                      ["Original", release.healEnvelope.originalSchema.join(", "), "var(--t3)"],
-                      ["Healed", release.healEnvelope.healedSchema.slice(3).join(", "), "var(--cyan)"],
-                    ].map(([label, val, color]) => (
-                      <div key={label as string} style={{ padding: "8px 10px", borderRadius: "var(--r-sm)", background: "rgba(255 255 255 / 0.03)" }}>
-                        <div className="text-label" style={{ marginBottom: 4 }}>{label}</div>
-                        <div className="text-mono" style={{ fontSize: 10, color: color as string, lineHeight: 1.5 }}>{val}</div>
+              {/* Sources read */}
+              {sources.length > 0 && (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--bd)", display: "flex", flexDirection: "column", gap: 8 }}>
+                  {sources.slice(0, 4).map(source => {
+                    const t = TRANSPORT_LABEL[source.transport];
+                    const Icon = t.icon;
+                    return (
+                      <div key={source.sourceUrl}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                          <Icon size={10} color={t.color} style={{ flexShrink: 0 }} />
+                          <span className="text-label" style={{ color: t.color }}>{t.label}</span>
+                          <span className="text-caption" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {source.sourceType}
+                          </span>
+                          <span className="text-caption" style={{ marginLeft: "auto", flexShrink: 0 }}>
+                            {source.extractedClaims.length} claim{source.extractedClaims.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                        {source.extractedClaims.length === 0 && (
+                          <p className="text-caption" style={{ paddingLeft: 15, display: "flex", alignItems: "center", gap: 4 }}>
+                            <AlertTriangle size={9} /> read, but nothing extractable
+                          </p>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
+                  {sources.length > 4 && (
+                    <span className="text-caption">+{sources.length - 4} more</span>
+                  )}
                 </div>
+              )}
+
+              {sources.length === 0 && !research.servedFromIndex && (
+                <p className="text-caption" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--bd)", display: "flex", alignItems: "center", gap: 5 }}>
+                  <AlertTriangle size={10} color="var(--amber)" />
+                  No sources retrieved — findings are unverified, not absent.
+                </p>
               )}
             </div>
           );
         })}
       </div>
 
+    </div>
+  );
+}
+
+function Row({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <span className="text-label">{label}</span>
+      <span className="text-mono" style={{ fontSize: 11, color: color ?? "var(--t2)", fontWeight: 500 }}>{value}</span>
     </div>
   );
 }

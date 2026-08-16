@@ -18,7 +18,7 @@ const RISK: Record<string, { strip: string; badge: string; label: string; scoreC
 };
 
 export default function DependencyCard({ report, onOpenCitation, style }: DependencyCardProps) {
-  const { dependency, overallRiskScore, riskLevel, breakingChanges, collectorStatus } = report;
+  const { dependency, overallRiskScore, riskLevel, breakingChanges, research } = report;
   const r = RISK[riskLevel] ?? RISK.SAFE;
 
   return (
@@ -92,7 +92,7 @@ export default function DependencyCard({ report, onOpenCitation, style }: Depend
         {/* Footer */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid var(--bd)" }}>
           <a
-            href={collectorStatus.scrapedUrl}
+            href={research.primaryUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-caption"
@@ -100,7 +100,7 @@ export default function DependencyCard({ report, onOpenCitation, style }: Depend
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; }}
           >
-            {collectorStatus.collectorId} <ExternalLink size={9} />
+            {research.primaryUrl} <ExternalLink size={9} />
           </a>
           <button
             onClick={() => onOpenCitation(report)}

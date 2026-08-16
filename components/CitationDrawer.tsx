@@ -18,7 +18,7 @@ export default function CitationDrawer({ report, onClose }: CitationDrawerProps)
   }, [report, onClose]);
 
   if (!report) return null;
-  const { dependency, breakingChanges, collectorStatus } = report;
+  const { dependency, breakingChanges, research } = report;
 
   return (
     <div
@@ -64,7 +64,7 @@ export default function CitationDrawer({ report, onClose }: CitationDrawerProps)
               <ArrowRight size={11} color="var(--t3)" />
               <span className="text-mono" style={{ fontSize: 12, color: "var(--cyan)", fontWeight: 600 }}>v{dependency.targetVersion}</span>
               <a
-                href={collectorStatus.scrapedUrl}
+                href={research.primaryUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, color: "var(--t3)", textDecoration: "none", marginLeft: 8, transition: "color 140ms" }}
@@ -85,12 +85,14 @@ export default function CitationDrawer({ report, onClose }: CitationDrawerProps)
           </button>
         </div>
 
-        {/* Collector info bar */}
+        {/* Research info bar */}
         <div style={{ padding: "10px 24px", borderBottom: "1px solid var(--bd)", display: "flex", alignItems: "center", gap: 10 }}>
-          <span className="text-label">Collector</span>
-          <span className="text-mono" style={{ fontSize: 11, color: "var(--cyan)" }}>{collectorStatus.collectorId}</span>
-          {collectorStatus.status === "healed" && (
-            <span className="badge badge-high" style={{ marginLeft: "auto" }}>⚡ Self-Healed</span>
+          <span className="text-label">Evidence</span>
+          <span className="text-mono" style={{ fontSize: 11, color: "var(--cyan)" }}>
+            {research.sourcesFetched} source{research.sourcesFetched === 1 ? "" : "s"} · {research.knowledgeExtracted} claims
+          </span>
+          {research.servedFromIndex && (
+            <span className="badge badge-safe" style={{ marginLeft: "auto" }}>From index</span>
           )}
         </div>
 
@@ -154,7 +156,7 @@ export default function CitationDrawer({ report, onClose }: CitationDrawerProps)
                   {/* Citation */}
                   <div style={{ paddingLeft: 22, paddingTop: 10, borderLeft: "2px solid var(--bd-hi)", marginLeft: 8 }}>
                     <p style={{ fontSize: 11, color: "var(--t3)", fontStyle: "italic", lineHeight: 1.6, marginBottom: 5 }}>
-                      "{item.citation.quotedText}"
+                      &ldquo;{item.citation.quotedText}&rdquo;
                     </p>
                     <a
                       href={item.citation.url}

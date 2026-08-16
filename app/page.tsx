@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Navbar from "@/components/Navbar";
 import ManifestInput from "@/components/ManifestInput";
 import BlastMatrix from "@/components/BlastMatrix";
@@ -17,12 +17,9 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [citation, setCitation]   = useState<DependencyRiskReport | null>(null);
 
-  useEffect(() => {
-    run(PRESET_MANIFESTS[0].content, PRESET_MANIFESTS[0].fileName);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const run = async (content: string, fileName: string) => {
+  // Stable identity so the mount effect below can depend on it honestly
+  // rather than suppressing the dependency check.
+  const run = useCallback(async (content: string, fileName: string) => {
     setIsLoading(true);
     try {
       const pr = await fetch("/api/parse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, fileName }) });
@@ -34,12 +31,20 @@ export default function Home() {
       if (!ar.ok || !ad.analysis) throw new Error(ad.error);
 
       setAnalysis(ad.analysis);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // Load the first preset once, so the dashboard has something to show.
+  // Deferred by a tick because `run` sets loading state synchronously, which is
+  // not allowed directly inside an effect body.
+  useEffect(() => {
+    const timer = setTimeout(() => run(PRESET_MANIFESTS[0].content, PRESET_MANIFESTS[0].fileName), 0);
+    return () => clearTimeout(timer);
+  }, [run]);
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -47,7 +52,7 @@ export default function Home() {
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        healedCount={analysis?.selfHealingSummary.healedScraperCount ?? 0}
+        sourceCount={analysis?.researchSummary.totalSourcesFetched ?? 0}
         totalBreakings={analysis?.totalBreakingChanges ?? 0}
       />
 
@@ -70,7 +75,7 @@ export default function Home() {
 
               <p className="text-body" style={{ fontSize: 14, lineHeight: 1.7, maxWidth: 460 }}>
                 Point at any <code className="code-inline">package.json</code> or{" "}
-                <code className="code-inline">requirements.txt</code>. Bright Data Scraper Studio scrapes release notes across self-healing layouts and maps every breaking change to your code.
+                <code className="code-inline">requirements.txt</code>. Every dependency is researched against its official changelogs, release notes, and migration guides — and every breaking change comes back with the sentence it was found in.
               </p>
             </div>
 
@@ -81,9 +86,10 @@ export default function Home() {
             {isLoading && (
               <div className="surface" style={{ padding: "48px 32px", textAlign: "center" }}>
                 <Loader2 size={22} color="var(--cyan)" style={{ margin: "0 auto 14px", animation: "spin 1s linear infinite" }} />
-                <div className="text-title" style={{ marginBottom: 5 }}>Deploying Bright Data Collectors…</div>
+                <div className="text-title" style={{ marginBottom: 5 }}>Researching dependencies…</div>
                 <div className="text-body" style={{ fontSize: 12 }}>
-                  Scraping GitHub Releases, PyPI, and custom doc sites. Self-healing schema envelopes active.
+                  Resolving versions from the registry, then reading release notes, changelogs, and migration
+                  guides in order of authority.
                 </div>
               </div>
             )}

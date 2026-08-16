@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Wrapper so the skill can invoke the CLI from any working directory.
+#
+# Resolves the engine relative to this script rather than the caller's cwd, which
+# is what lets the skill run against a repository other than this one.
+set -e
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ENGINE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd)
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "upgrade-intel: bun is required (https://bun.sh)" >&2
+  exit 1
+fi
+
+exec bun "$ENGINE_ROOT/cli/index.ts" "$@"
