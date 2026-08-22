@@ -98,9 +98,10 @@ bun test lib/engine     # or: bun run test
 bun run typecheck
 ```
 
-219 tests. The pure units — semver, error fingerprinting, document normalization,
+231 tests. The pure units — semver, error fingerprinting, document normalization,
 extraction, confidence, dedupe, the store, manifest parsing, repository
-correlation, embeddings, the knowledge graph, and feedback — are tested directly.
+correlation, embeddings, the knowledge graph, error resolution, and feedback — are tested
+directly.
 
 `embeddings.test.ts` injects the HTTP call into the Voyage client and registers a
 deterministic fake embedder, so the suite never needs a key and never touches the
@@ -165,6 +166,15 @@ matching prose in page metadata.
   need, and there is none: the relations it names are already implied by fields
   the objects carry. The cost is that a relation nothing asserts does not exist —
   the graph knows what was extracted, not what is true.
+- **Symptom and cause are retrieved separately.** An error message and the
+  release note that explains it share almost no vocabulary, so ranked together
+  the issue quoting the error always wins and the cause falls below the cut
+  (measured on chalk 5.6.2: the release note ranked 15th of 23). `resolveError`
+  runs a second, type-filtered query for breaking changes in the version window
+  and prefers an authoritative cause over a community symptom — ordered by
+  whether the change names the symbols the error actually named. A change about
+  *other* APIs ranks below a general one, because "this package is now pure ESM"
+  explains a missing member and "we removed `.hsl()`" does not.
 - **Extraction rules tighten over time; the index does not follow.** Entries
   written before a rule was added stay until they are removed. `upgrade-intel
   prune` re-applies the housekeeping filter to what is already stored and is dry

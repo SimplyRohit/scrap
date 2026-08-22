@@ -70,10 +70,17 @@ successful one — it stops the next agent repeating it.
 upgrade-intel report \
   --package <package> \
   --version <version> \
+  --error "<the same error text you resolved>" \
+  --stack "<the same stack trace>" \
   --summary "<what you changed>" \
   --derived-from <knowledge-id,...> \
   --tests passed --typecheck passed --build passed
 ```
+
+Pass `--error` and `--stack` exactly as you passed them to `error`. The report is
+linked to the error by fingerprint; without them the verified fix is stored but
+can never be retrieved by the error that produced it, and the next agent repeats
+your work.
 
 ## Rules
 

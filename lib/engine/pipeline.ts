@@ -14,6 +14,7 @@ import { normalizeDocument } from './analysis/normalize';
 import { assessRisk, describeChange, overallSafety, type RiskAssessment, type VersionChange } from './analysis/versionDiff';
 import { SOURCE_TRUST, type KnowledgeObject, type SourceRef } from './knowledge';
 import type { ManifestParseResult } from './ingestion/manifest';
+import { backfillEmbeddings } from './index/backfill';
 import { getStore, type KnowledgeStore } from './index/store';
 import type { PackageRef } from './request';
 import { prioritizeReleases, releaseForTag, releasesInWindow } from './research/github';
@@ -324,6 +325,9 @@ export async function researchPackageUpgrade(
 
   if (deduped.knowledge.length > 0) {
     await store.upsert(deduped.knowledge);
+    // Same reason as the error path: knowledge with no vector is invisible to
+    // semantic retrieval until something embeds it.
+    await backfillEmbeddings({ store, ids: deduped.knowledge.map((item) => item.id) });
   }
 
   if (targetVersion && deduped.knowledge.length === 0 && trace.fetched.length > 0) {

@@ -208,3 +208,44 @@ describe('security classification', () => {
     expect(knowledge[0].type).toBe('security_fix');
   });
 });
+
+describe('symbol extraction', () => {
+  test('captures a member written with a leading dot', () => {
+    // "Remove `.keyword()`, `.hsl()`" names five APIs. Rejecting the leading dot
+    // left the claim naming none, which made a change about five specific
+    // methods look as general as "this package is now pure ESM".
+    const [knowledge] = extract(`## Breaking
+
+- Remove \`.keyword()\`, \`.hsl()\`, and \`.ansi()\` color models
+`);
+
+    expect(knowledge.affectedApis).toEqual(['keyword()', 'hsl()', 'ansi()']);
+  });
+});
+
+describe('heading-derived claims', () => {
+  test('advisory prose under a Breaking heading is not a breaking change', () => {
+    // Everything in this section inherits `breaking_change` from the heading,
+    // so without a change assertion the advice competes with the actual change.
+    const knowledge = extract(`## Breaking
+
+- This package is now pure ESM.
+- The issue tracker is not a support channel for your favorite bundler.
+- It's totally fine to stay on v4.
+`);
+
+    expect(knowledge.map((item) => item.title)).toEqual(['This package is now pure ESM.']);
+  });
+
+  test('a bug fix keeps its place whatever its wording', () => {
+    // Maintenance sections are exempt: "was this fixed?" is a question the index
+    // has to be able to answer, and fix wording rarely asserts anything.
+    const knowledge = extract(`## Bug Fixes
+
+- Improve the error message shown when the config file is absent
+`);
+
+    expect(knowledge).toHaveLength(1);
+    expect(knowledge[0].type).toBe('bug_fix');
+  });
+});

@@ -98,8 +98,11 @@ but `withEmbeddings < total`, run `POST /api/index {"action":"backfill"}` first.
 2. **Do not edit outside `affectedFiles`.** Correlation defines the blast radius.
 3. **Do not treat an empty result as safety.** Check `trace.fetched` — zero
    sources read means research failed.
-4. **Always report the outcome**, including failures. Refutations lower the
-   confidence of bad knowledge; silence leaves it in place for the next agent.
+4. **Always report the outcome**, including failures, and include the same
+   `error`/`stackTrace` you sent to `/api/errors/analyze`. The verified fix is
+   linked to the error by fingerprint; report without them and it is stored but
+   unreachable by the error that produced it. Refutations lower the confidence of
+   bad knowledge; silence leaves it in place for the next agent.
 5. **Do not re-run research in a loop.** The index answers repeats; only pass
    `refresh: true` when you have reason to believe the sources changed.
 

@@ -369,10 +369,6 @@ async function commandSearch(args: ParsedArgs): Promise<number> {
 
   if (!query && !packageName) fail('usage: upgrade-intel search <query> [--package <name>]');
 
-  // Semantic scoring when a provider is configured; lexical otherwise. Both
-  // paths return results, so this never gates the command.
-  initializeEngine();
-
   const results = await getStore().search({
     text: query || undefined,
     package: packageName,
@@ -488,6 +484,10 @@ async function commandReport(args: ParsedArgs): Promise<number> {
     package: packageName,
     version: stringFlag(args.flags, 'version', 'v'),
     error: stringFlag(args.flags, 'error', 'e'),
+    // Without the stack, the report fingerprints to something other than the
+    // resolution it came from, and the verified fix can never be retrieved by
+    // the error that produced it.
+    stackTrace: stringFlag(args.flags, 'stack'),
     summary,
     fix: [],
     derivedFrom: derived ? derived.split(',').map((id) => id.trim()) : undefined,
@@ -660,6 +660,10 @@ const COMMANDS: Record<string, (args: ParsedArgs) => Promise<number>> = {
 };
 
 export async function run(argv: string[]): Promise<number> {
+  // Once, at the entry point. Doing it per command meant the error path — the
+  // one that most needs semantic retrieval — silently ran lexical-only.
+  initializeEngine();
+
   const args = parseArgs(argv);
 
   if (!args.command || boolFlag(args.flags, 'help', 'h')) {
