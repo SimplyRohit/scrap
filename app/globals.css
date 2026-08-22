@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Dark mode is class-driven, so the choice survives a reload and can be set
+   before first paint. See `lib/theme.ts`. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ════════════════════════════════════════════════════════════════════════════
    Rift — one light surface, drawn like a blueprint.
 
@@ -28,6 +32,11 @@
 
   --color-signal: var(--signal);
   --color-signal-ink: var(--signal-ink);
+  /* The signal as a standalone mark on the page, rather than as text sitting
+     on top of it — dark olive on paper, bright chartreuse on ink. */
+  --color-mark: var(--mark);
+  --color-scrim: var(--scrim);
+  --color-tint: var(--tint);
 
   /* Risk ladder — mirrors RiskLevel in lib/types.ts. Small sizes only. */
   --color-critical: var(--critical);
@@ -76,12 +85,54 @@
 
   --signal: oklch(0.9 0.19 118);
   --signal-ink: oklch(0.28 0.09 118);
+  --mark: var(--signal-ink);
+
+  /* Base colour for every translucent wash: hatches, dots, scrollbars. */
+  --tint: oklch(0.19 0.008 60);
+  --scrim: oklch(0.19 0.008 60 / 25%);
 
   --critical: oklch(0.51 0.17 27);
   --high: oklch(0.55 0.12 75);
   --medium: oklch(0.58 0.1 95);
   --low: oklch(0.46 0.01 65);
   --safe: oklch(0.48 0.12 155);
+
+  color-scheme: light;
+}
+
+/* ─── Dark ──────────────────────────────────────────────────────────────────
+   The same drawing, inked on dark paper. `panel` stays the raised surface and
+   `console` stays recessed, so every depth cue keeps its meaning.
+   ──────────────────────────────────────────────────────────────────────── */
+.dark {
+  --paper: oklch(0.185 0.006 75);
+  --panel: oklch(0.228 0.006 75);
+  --ink: oklch(0.94 0.004 85);
+  --rule: oklch(0.94 0.004 85 / 13%);
+  --console: oklch(0.155 0.012 250);
+
+  --secondary: oklch(0.285 0.006 75);
+  --muted: oklch(0.285 0.006 75);
+  --muted-foreground: oklch(0.71 0.008 80);
+  --faint: oklch(0.55 0.008 80);
+
+  --input: oklch(0.94 0.004 85 / 22%);
+  --ring: oklch(0.94 0.004 85 / 45%);
+
+  /* On dark the signal is the mark; the olive would disappear. */
+  --mark: var(--signal);
+
+  --tint: oklch(0.94 0.004 85);
+  --scrim: oklch(0.09 0.008 75 / 60%);
+
+  /* Lifted so each stays legible against a dark surface at badge sizes. */
+  --critical: oklch(0.68 0.16 27);
+  --high: oklch(0.76 0.12 75);
+  --medium: oklch(0.82 0.11 95);
+  --low: oklch(0.71 0.008 80);
+  --safe: oklch(0.72 0.13 155);
+
+  color-scheme: dark;
 }
 
 @layer base {
@@ -135,10 +186,10 @@
     border-left: 1px solid var(--rule);
   }
   ::-webkit-scrollbar-thumb {
-    background: oklch(0.19 0.008 60 / 25%);
+    background: color-mix(in oklab, var(--tint) 25%, transparent);
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.19 0.008 60 / 40%);
+    background: color-mix(in oklab, var(--tint) 40%, transparent);
   }
 }
 
@@ -175,14 +226,19 @@
     opacity: 0.4;
   }
 
+  /* A data URI cannot read a custom property, so the stroke is written twice. */
   .bp-cross {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cpath d='M64 58.5v11M58.5 64h11' stroke='rgba(38,34,26,0.3)' stroke-width='1'/%3E%3C/svg%3E");
     background-size: 128px 128px;
   }
 
+  .dark .bp-cross {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cpath d='M64 58.5v11M58.5 64h11' stroke='rgba(233,231,226,0.22)' stroke-width='1'/%3E%3C/svg%3E");
+  }
+
   .bp-dots {
     background-image: radial-gradient(
-      oklch(0.19 0.008 60 / 22%) 1px,
+      color-mix(in oklab, var(--tint) 22%, transparent) 1px,
       transparent 1px
     );
     background-size: 16px 16px;
@@ -191,7 +247,7 @@
   .hatched {
     background-image: repeating-linear-gradient(
       -45deg,
-      oklch(0.19 0.008 60 / 6%) 0 1px,
+      color-mix(in oklab, var(--tint) 6%, transparent) 0 1px,
       transparent 1px 11px
     );
   }
@@ -318,13 +374,13 @@
     display: inline-block;
     width: 6px;
     height: 6px;
-    background: var(--signal-ink);
+    background: var(--mark);
   }
   .pulse-dot::after {
     content: "";
     position: absolute;
     inset: -3px;
-    border: 1px solid var(--signal-ink);
+    border: 1px solid var(--mark);
     animation: pulse-ring 2.4s var(--ease-out-quint) infinite;
   }
 
@@ -339,6 +395,9 @@
   }
   .marker[data-shown="true"] {
     background-size: 100% 100%;
+    /* The highlight is chartreuse in both themes, so the text on it cannot
+       follow the foreground. */
+    color: var(--signal-ink);
   }
 
   /* ─── Row that grows a signal edge on hover ────── */
@@ -352,7 +411,7 @@
     top: 0;
     bottom: 0;
     width: 2px;
-    background: var(--signal-ink);
+    background: var(--mark);
     transform: scaleY(0);
     transition: transform 0.3s var(--ease-out-quint);
   }
@@ -389,7 +448,7 @@
 
   .scroll-slim {
     scrollbar-width: thin;
-    scrollbar-color: oklch(0.19 0.008 60 / 22%) transparent;
+    scrollbar-color: color-mix(in oklab, var(--tint) 22%, transparent) transparent;
   }
   .scroll-slim::-webkit-scrollbar {
     width: 4px;
@@ -400,7 +459,7 @@
     border: 0;
   }
   .scroll-slim::-webkit-scrollbar-thumb {
-    background: oklch(0.19 0.008 60 / 22%);
+    background: color-mix(in oklab, var(--tint) 22%, transparent);
   }
 }
 

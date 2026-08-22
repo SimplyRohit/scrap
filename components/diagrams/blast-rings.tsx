@@ -52,7 +52,7 @@ export function BlastRings() {
           r={RADII[2]}
           fill="none"
           strokeWidth="1"
-          className="radius-pulse stroke-signal-ink"
+          className="radius-pulse stroke-mark"
           style={{ "--ox": `${CX}px`, "--oy": `${CY}px` } as React.CSSProperties}
         />
 
@@ -105,7 +105,7 @@ export function BlastRings() {
                   r="4"
                   className={cn(
                     "transition-colors duration-300",
-                    active === i ? "fill-signal-ink" : "fill-paper stroke-foreground/25",
+                    active === i ? "fill-mark" : "fill-paper stroke-foreground/25",
                   )}
                   strokeWidth="1"
                 />

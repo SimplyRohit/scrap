@@ -75,7 +75,7 @@ export function CopyCommand({ command, size, className }: CopyCommandProps) {
         />
         <CheckGlyph
           className={cn(
-            "absolute text-signal-ink transition-all duration-200",
+            "absolute text-mark transition-all duration-200",
             copied ? "scale-100 opacity-100" : "scale-75 opacity-0",
           )}
         />

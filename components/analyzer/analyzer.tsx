@@ -173,7 +173,7 @@ function Researching() {
               aria-hidden
               className={
                 i < stage
-                  ? "size-1.5 bg-signal-ink"
+                  ? "size-1.5 bg-mark"
                   : i === stage
                     ? "size-1.5 bg-foreground"
                     : "size-1.5 bg-foreground/25"

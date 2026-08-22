@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { ButtonLink } from "@/components/ui/button";
 import { Logo } from "@/components/ui/mark";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useScrolled } from "@/hooks/use-scrolled";
 import { PAGE_NAV, SITE } from "@/lib/marketing/site";
 import { cn } from "@/lib/utils";
@@ -80,6 +81,8 @@ export function SiteHeader() {
             <GithubGlyph />
             Source
           </a>
+
+          <ThemeToggle />
 
           <ButtonLink href="/analyzer" size="xs" className="hidden sm:inline-flex">
             Open analyzer

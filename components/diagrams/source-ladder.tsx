@@ -57,7 +57,7 @@ export function SourceLadder() {
                   <span
                     className={cn(
                       "absolute inset-y-0 left-0 origin-left transition-all duration-800 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                      active ? "bg-signal-ink" : "bg-foreground/25",
+                      active ? "bg-mark" : "bg-foreground/25",
                     )}
                     style={{
                       width: inView ? `${tier.weight * 100}%` : "0%",

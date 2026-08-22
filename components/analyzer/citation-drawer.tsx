@@ -54,7 +54,7 @@ export function CitationDrawer({ report, open, onClose }: CitationDrawerProps) {
         if (event.target === event.currentTarget) onClose();
       }}
       className={cn(
-        "fixed inset-0 z-50 flex justify-end bg-foreground/25 backdrop-blur-[2px] transition-opacity duration-300",
+        "fixed inset-0 z-50 flex justify-end bg-scrim backdrop-blur-[2px] transition-opacity duration-300",
         entered ? "opacity-100" : "pointer-events-none opacity-0",
       )}
     >

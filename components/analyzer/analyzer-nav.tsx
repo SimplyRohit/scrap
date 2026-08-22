@@ -4,6 +4,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { Logo } from "@/components/ui/mark";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useScrolled } from "@/hooks/use-scrolled";
 import { SITE } from "@/lib/marketing/site";
 import { cn } from "@/lib/utils";
@@ -89,10 +90,10 @@ export function AnalyzerNav({
 
           <span className="flex items-center gap-2">
             <span className="pulse-dot" aria-hidden />
-            <span className="label text-muted-foreground">
-              Live
-            </span>
+            <span className="label text-muted-foreground">Live</span>
           </span>
+
+          <ThemeToggle />
         </div>
       </div>
     </header>

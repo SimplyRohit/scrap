@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 
 import { SITE } from "@/lib/marketing/site";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 import "./globals.css";
 
@@ -84,8 +85,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#e9e7e2",
-  colorScheme: "light",
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#e9e7e2" },
+    { media: "(prefers-color-scheme: dark)", color: "#131210" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -93,11 +97,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${instrument.variable} h-full`}
+      suppressHydrationWarning
     >
+      <head>
+        {/* Blocking on purpose: it must land before the first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
         <a
           href="#top"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-100 focus:focus:bg-foreground focus:px-4 focus:py-2 focus:text-background"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-100 focus:bg-foreground focus:px-4 focus:py-2 focus:text-background"
         >
           Skip to content
         </a>
