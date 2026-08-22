@@ -23,7 +23,7 @@ import {
 } from '../knowledge';
 import { satisfies } from '../semver';
 import { INDEX_FILE, ensureDataDirs } from '../paths';
-import { cosineSimilarity, embeddingsEnabled } from './embeddings';
+import { cosineSimilarity, getEmbedder } from './embeddings';
 
 export interface SearchQuery {
   text?: string;
@@ -69,6 +69,8 @@ export interface IndexStats {
   byType: Record<string, number>;
   byPackage: Record<string, number>;
   withEmbeddings: number;
+  /** Distinct models behind those vectors. More than one means a backfill is due. */
+  embeddingModels: string[];
   lastUpdated: string | null;
 }
 
@@ -85,6 +87,13 @@ export interface KnowledgeStore {
    */
   patch(id: string, changes: Partial<KnowledgeObject>): Promise<KnowledgeObject | null>;
   all(): Promise<KnowledgeObject[]>;
+  /**
+   * Deletes by id, returning how many existed. Separate from `patch` because
+   * some knowledge should not be corrected but removed — an entry extracted
+   * under rules that have since been tightened is not wrong about the world, it
+   * should never have been indexed.
+   */
+  remove(ids: string[]): Promise<number>;
   stats(): Promise<IndexStats>;
   /** True when this package/version pair already has indexed knowledge (gen.md section 23). */
   hasCoverage(packageName: string, version?: string): Promise<boolean>;
@@ -157,7 +166,12 @@ export class JsonKnowledgeStore implements KnowledgeStore {
           createdAt: existing.createdAt,
           sources,
           confidence: Math.max(existing.confidence, object.confidence),
-          embedding: object.embedding ?? existing.embedding,
+          // The vector and the model that produced it move together; taking one
+          // from the incoming object and the other from the existing one would
+          // mislabel it.
+          ...(object.embedding
+            ? { embedding: object.embedding, embeddingModel: object.embeddingModel }
+            : { embedding: existing.embedding, embeddingModel: existing.embeddingModel }),
           updatedAt: new Date().toISOString(),
         });
         updated++;
@@ -180,6 +194,26 @@ export class JsonKnowledgeStore implements KnowledgeStore {
 
   async all(): Promise<KnowledgeObject[]> {
     return (await this.load()).knowledge;
+  }
+
+  async remove(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+
+    const run = this.writeQueue.then(async () => {
+      const index = await this.load();
+      const doomed = new Set(ids);
+      const keep = index.knowledge.filter((item) => !doomed.has(item.id));
+      const deleted = index.knowledge.length - keep.length;
+      if (deleted === 0) return 0;
+
+      const next: IndexFile = { version: 1, updatedAt: new Date().toISOString(), knowledge: keep };
+      this.cache = next;
+      await this.persist(next);
+      return deleted;
+    });
+
+    this.writeQueue = run.catch(() => undefined);
+    return run;
   }
 
   async get(id: string): Promise<KnowledgeObject | null> {
@@ -234,12 +268,15 @@ export class JsonKnowledgeStore implements KnowledgeStore {
 
     const lexicalScores = bm25(candidates, query.text ?? '');
     const now = Date.now();
-    const useSemantic = embeddingsEnabled() && Array.isArray(query.embedding);
+    const model = getEmbedder()?.id ?? null;
+    const useSemantic = model !== null && Array.isArray(query.embedding);
 
     const scored = candidates.map((knowledge, position) => {
       const signals: RankingSignals = {
         lexical: lexicalScores[position],
-        semantic: useSemantic && knowledge.embedding ? cosineSimilarity(query.embedding!, knowledge.embedding) : 0,
+        semantic: useSemantic && usableVector(knowledge, model)
+          ? cosineSimilarity(query.embedding!, knowledge.embedding!)
+          : 0,
         exactErrorMatch: query.errorType && mentionsErrorType(knowledge, query.errorType) ? 1 : 0,
         packageMatch: query.package && knowledge.package.toLowerCase() === query.package.toLowerCase() ? 1 : 0,
         versionMatch: query.version && matchesVersion(knowledge, query.version) ? 1 : 0,
@@ -270,9 +307,26 @@ export class JsonKnowledgeStore implements KnowledgeStore {
       byType,
       byPackage,
       withEmbeddings: index.knowledge.filter((item) => item.embedding !== null).length,
+      embeddingModels: [
+        ...new Set(index.knowledge.filter((item) => item.embedding).map((item) => item.embeddingModel ?? 'unknown')),
+      ].sort(),
       lastUpdated: index.updatedAt,
     };
   }
+}
+
+/**
+ * A vector is only comparable to the query vector if the same model produced
+ * both. Rather than scoring a stale one — which yields a confident-looking
+ * number that means nothing — it is ignored, and the lexical signal carries the
+ * result until a backfill re-embeds it.
+ */
+function usableVector(knowledge: KnowledgeObject, model: string | null): boolean {
+  if (!knowledge.embedding) return false;
+  // Vectors written before the model was recorded are given the benefit of the
+  // doubt; `cosineSimilarity` still returns 0 if the widths disagree.
+  if (!knowledge.embeddingModel) return true;
+  return knowledge.embeddingModel === model;
 }
 
 function passesFilters(knowledge: KnowledgeObject, query: SearchQuery): boolean {

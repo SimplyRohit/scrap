@@ -72,8 +72,17 @@ function claimValue(knowledge: KnowledgeObject): number {
  * Ordered classification rules — first match wins, so the most specific and most
  * consequential patterns come first.
  */
+/**
+ * A security claim needs security substance, not the word.
+ *
+ * The bare token `security` matched "Update security.md" and filed a
+ * documentation edit as a HIGH-severity security fix.
+ */
+const SECURITY_SUBSTANCE =
+  /\bCVE-\d{4}-\d+\b|\bGHSA-[\w-]+\b|\[security\]|security (fix|advisory|vulnerabilit|issue|patch|release|update)|\bvulnerabilit|\bexploit\b|\bXSS\b|\bCSRF\b|prototype pollution|\bRCE\b/i;
+
 const CLASSIFIERS: Array<{ type: KnowledgeType; pattern: RegExp }> = [
-  { type: 'security_fix', pattern: /\bCVE-\d{4}-\d+|security (fix|advisory|vulnerabilit)/i },
+  { type: 'security_fix', pattern: SECURITY_SUBSTANCE },
   { type: 'removed_api', pattern: /\b(has been|have been|was|were|is|are)?\s*removed\b|\bno longer (exists?|available|supported|works?)\b|\bdropped support\b|\bdeleted\b/i },
   { type: 'renamed_api', pattern: /\brenamed\b|\bnow (called|named)\b|\bhas been renamed to\b/i },
   { type: 'deprecated_api', pattern: /\bdeprecat/i },
@@ -137,6 +146,19 @@ const CONVENTIONAL_BREAKING = /^\s*\w+(\([^)]*\))?!:/;
 /** Headings whose content is never a change claim. */
 const EXCLUDED_HEADING = /contributor|acknowledg|thanks|sponsor|install(ation)?$|license|table of contents/i;
 
+/**
+ * Work on the project's own scaffolding rather than on the package.
+ *
+ * Generated release notes list every merged commit, so a release reads as
+ * "Removed Webpack", "Update security.md", "Fix Gitpod dead link", "Using Logo
+ * Axios in Readme.md". None of that can break a consumer, but each one becomes a
+ * knowledge object, dilutes the index, and — for the "security" one — arrives
+ * labelled HIGH. The claim is dropped unless it explicitly announces a breaking
+ * change, which is the one case where housekeeping wording can hide a real one.
+ */
+const REPOSITORY_HOUSEKEEPING =
+  /\b(readme|contributing|code[- ]of[- ]conduct|changelog|security)\.md\b|\b(readme|dependabot|gitpod|codeql|renovate|codecov|stale ?bot)\b|\bgithub actions?\b|\bworkflow file\b|\b(ci|build) (config|pipeline|matrix)\b|\bbadges?\b|\blogo\b|\bdead link\b|\bsyntax highlighting\b|\btypos?\b|\bcode block\b|\bissue template\b|\bpull request template\b|\bfunding\b/i;
+
 const VERSION_IN_TEXT = /\bv?(\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?)\b/;
 
 /**
@@ -148,6 +170,11 @@ function classify(text: string, heading: string, headingContext: string): Knowle
   const explicitlyBreaking = EXPLICIT_BREAKING.test(text) || CONVENTIONAL_BREAKING.test(text);
   if (explicitlyBreaking) return classifyProse(text) ?? 'breaking_change';
 
+  // Substance outranks the heading. Projects list "Fixed prototype pollution in
+  // formDataToJSON" under "Bug Fixes"; filing that as a bug fix understates how
+  // urgently a consumer needs to upgrade.
+  if (SECURITY_SUBSTANCE.test(text)) return 'security_fix';
+
   for (const [pattern, type] of CONVENTIONAL_PREFIX) {
     if (pattern.test(text)) return type;
   }
@@ -157,11 +184,18 @@ function classify(text: string, heading: string, headingContext: string): Knowle
   }
 
   // A maintenance section demotes its contents; only an explicit marker escapes.
-  if (MAINTENANCE_HEADING.test(headingContext)) {
-    return /\bsecurity\b|\bCVE-\d{4}-\d+/i.test(text) ? 'security_fix' : 'bug_fix';
-  }
+  // Security is already handled above, so anything left here is a fix.
+  if (MAINTENANCE_HEADING.test(headingContext)) return 'bug_fix';
 
   return classifyProse(text);
+}
+
+/**
+ * Exported so an index built under older rules can be pruned of entries this
+ * would now reject, rather than requiring every package to be re-researched.
+ */
+export function isRepositoryHousekeeping(claim: string): boolean {
+  return REPOSITORY_HOUSEKEEPING.test(claim) && !EXPLICIT_BREAKING.test(claim);
 }
 
 function classifyProse(text: string): KnowledgeType | null {
@@ -314,6 +348,10 @@ export function extractKnowledge(
     for (const rawClaim of claimsFrom(section)) {
       const claim = stripMarkdownNoise(rawClaim);
       if (claim.length < 12) continue;
+
+      // Housekeeping is dropped before classification, so it cannot be promoted
+      // by a pattern that happens to match its wording.
+      if (isRepositoryHousekeeping(claim)) continue;
 
       const type =
         classify(claim, section.heading, headingContext) ??

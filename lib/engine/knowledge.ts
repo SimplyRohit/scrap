@@ -133,6 +133,12 @@ export interface KnowledgeObject {
   errorFingerprint?: string;
   /** Phase 2 seam. Null until an embedder is configured; retrieval degrades to lexical. */
   embedding: number[] | null;
+  /**
+   * Which embedder produced `embedding`. Vectors from different models are not
+   * comparable, so a mismatch means the vector is stale and must be recomputed
+   * rather than scored against.
+   */
+  embeddingModel?: string;
 
   createdAt: string;
   updatedAt: string;

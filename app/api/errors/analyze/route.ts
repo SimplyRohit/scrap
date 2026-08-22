@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { initializeEngine } from '@/lib/engine/bootstrap';
 import { resolveError } from '@/lib/engine/errorPipeline';
 import type { Ecosystem } from '@/lib/engine/knowledge';
 import { renderErrorAnalysis } from '@/lib/engine/output/markdown';
@@ -15,6 +16,9 @@ export const maxDuration = 300;
  */
 export async function POST(req: NextRequest) {
   try {
+    // Enables semantic retrieval when a provider is configured; harmless otherwise.
+    initializeEngine();
+
     const body = (await req.json()) as {
       package?: string;
       version?: string;

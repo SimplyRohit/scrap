@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { categorize, confidenceCaveat } from '@/lib/engine/analysis/confidence';
+import { initializeEngine } from '@/lib/engine/bootstrap';
+import { embedQuery } from '@/lib/engine/index/embeddings';
 import { getStore, type SearchQuery } from '@/lib/engine/index/store';
 
 export const runtime = 'nodejs';
@@ -30,6 +32,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Provide `query`/`text` or `package`' }, { status: 400 });
     }
 
+    // Semantic scoring only happens if a provider is configured and answers; the
+    // lexical half of the hybrid runs either way.
+    initializeEngine();
+    if (query.text) query.embedding = await embedQuery(query.text);
+
     const store = getStore();
     const results = await store.search(query);
     const topConfidence = results[0]?.knowledge.confidence ?? 0;
@@ -54,6 +61,7 @@ export async function POST(req: NextRequest) {
         signals,
       })),
       confidence: topConfidence,
+      retrieval: query.embedding ? 'hybrid' : 'lexical',
       caveat: confidenceCaveat(topConfidence),
       recommendedAction: results.length === 0 ? ['POST /api/research to index this package first'] : [],
       sources: results.flatMap(({ knowledge }) => knowledge.sources.map((source) => source.url)),

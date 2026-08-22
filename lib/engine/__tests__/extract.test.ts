@@ -131,3 +131,80 @@ describe('volume control', () => {
     expect(knowledge.some((item) => item.type === 'removed_api')).toBe(true);
   });
 });
+
+describe('repository housekeeping', () => {
+  test('drops work on the project\'s own scaffolding', () => {
+    // Real axios 1.0.0 release notes. Generated notes list every merged commit,
+    // so without this filter a release reads as a dozen breaking-ish findings
+    // that no consumer can possibly be affected by.
+    const knowledge = extract(`## Bug Fixes
+
+- Set permissions for GitHub actions
+- Included githubactions in the dependabot config
+- Update security.md
+- Fix Gitpod dead link
+- Enable syntax highlighting for a code block
+- Using Logo Axios in Readme.md
+- Fix markup for note in README
+`);
+
+    expect(knowledge).toHaveLength(0);
+  });
+
+  test('keeps a real fix listed beside the housekeeping', () => {
+    const knowledge = extract(`## Bug Fixes
+
+- Fix Gitpod dead link
+- Removed incorrect argument for NetworkError constructor
+`);
+
+    expect(knowledge.map((item) => item.title)).toEqual([
+      'Removed incorrect argument for NetworkError constructor',
+    ]);
+  });
+
+  test('keeps housekeeping wording when it announces a breaking change', () => {
+    // The one case where the filter must not fire: a genuine break described in
+    // terms of a file the project owns.
+    const knowledge = extract(`## Changes
+
+- BREAKING: the generated README badge endpoint was removed and must be updated
+`);
+
+    expect(knowledge).toHaveLength(1);
+  });
+});
+
+describe('security classification', () => {
+  test('a documentation edit is not a security fix', () => {
+    // Regression: `/\\bsecurity\\b/` matched "Update security.md" and filed a
+    // docs commit as HIGH severity.
+    const knowledge = extract(`## Chore
+
+- Update the security policy document
+`);
+
+    expect(knowledge.every((item) => item.type !== 'security_fix')).toBe(true);
+  });
+
+  test('substance outranks the heading it was filed under', () => {
+    // Projects list real advisories under "Bug Fixes". Demoting them there means
+    // the upgrade advice understates the urgency.
+    const knowledge = extract(`## Bug Fixes
+
+- Fixed prototype pollution vulnerability in the formDataToJSON helper
+`);
+
+    expect(knowledge[0].type).toBe('security_fix');
+    expect(knowledge[0].severity).toBe('HIGH');
+  });
+
+  test('a CVE reference is a security fix wherever it appears', () => {
+    const knowledge = extract(`## Chore
+
+- Update vendored lodash to 4.17.23 to fix CVE-2025-13465
+`);
+
+    expect(knowledge[0].type).toBe('security_fix');
+  });
+});

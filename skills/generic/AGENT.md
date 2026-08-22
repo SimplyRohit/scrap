@@ -31,6 +31,8 @@ Run `bun run dev`, then:
 | `POST /api/agent/resolve` | Package changes and errors in one call |
 | `POST /api/agent/report` | Record a fix outcome |
 | `GET /api/index` | Index statistics and capabilities |
+| `POST /api/index` | Index a package, or `{"action":"backfill"}` to embed knowledge |
+| `GET /api/graph` | Package knowledge graph; `?format=tree` for a readable diagram |
 
 ## The loop
 
@@ -67,6 +69,27 @@ POST /api/agent/report   { validation: { tests, typecheck, build }, derivedFrom 
 
 A `caveat` field on any item means the finding is **not** confirmed by an
 authoritative source. Report it to the user; do not act on it silently.
+
+## Correlation provenance
+
+Every usage site in `affectedFiles`/`symbolSites` carries how it was found:
+
+- `via: "parsed"` — resolved through the module graph. Renamed imports, namespace
+  members, and barrel re-exports are followed to the package's real export name.
+- `via: "textual"` — a name matched inside a file that imports the package. This
+  is a lead. Confirm it before editing.
+- `indirect` — reached through a barrel (`"via src/lib/barrel.ts"`) or a computed
+  access (`"computed access"`). Real, but the import you see is not the package.
+
+`scanned.parsed` versus `scanned.unparsed` tells you how much of the repository
+was resolved rather than grepped.
+
+## Retrieval
+
+`GET /api/index` reports `capabilities.embeddings`. When it is `false`, `/api/search`
+ranks lexically only and a query phrased differently from the changelog will miss —
+an empty result means "no keyword match", not "no such change". When it is `true`
+but `withEmbeddings < total`, run `POST /api/index {"action":"backfill"}` first.
 
 ## Obligations
 
