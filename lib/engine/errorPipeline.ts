@@ -16,6 +16,7 @@ import { extractKnowledge } from './analysis/extract';
 import { fingerprintError, retrievalText, type FingerprintInput } from './analysis/errorFingerprint';
 import { normalizeDocument } from './analysis/normalize';
 import { shortHash } from './hash';
+import { embedQuery } from './index/embeddings';
 import { getStore, type KnowledgeStore, type ScoredKnowledge } from './index/store';
 import { detectEcosystem } from './ingestion/manifest';
 import {
@@ -306,13 +307,17 @@ export async function resolveError(input: ResolveErrorInput): Promise<ErrorResol
     searchUnavailable: false,
   };
 
+  const text = retrievalText(fingerprint);
   const query = {
-    text: retrievalText(fingerprint),
+    text,
     package: input.package,
     ecosystem,
     version: input.version,
     errorType: fingerprint.errorType,
     limit: 12,
+    // Null with no embedder configured, and null again if the provider fails;
+    // either way the store scores lexically and the answer still comes back.
+    embedding: await embedQuery(text),
   };
 
   let results = await store.search(query);

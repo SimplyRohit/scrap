@@ -7,8 +7,10 @@
  */
 
 import { categorize, confidenceCaveat, isAssertable } from '../analysis/confidence';
-import { applicableKnowledge, type RepositoryImpact } from '../analysis/repository';
+import { applicableKnowledge, type RepositoryImpact, type UsageSite } from '../analysis/repository';
 import { isBreaking } from '../analysis/versionDiff';
+import { findNode, type KnowledgeGraph } from '../index/graph';
+import { compareStrings } from '../semver';
 import type { ErrorResolution } from '../errorPipeline';
 import { SEVERITY_ORDER, type KnowledgeObject } from '../knowledge';
 import type { ManifestResearchResult, PackageResearchResult } from '../pipeline';
@@ -108,6 +110,20 @@ export function renderBreakingChanges(result: PackageResearchResult): string {
 }
 
 /**
+ * How a site was found changes how much it is worth. A parsed site had its
+ * binding resolved through the module graph; a textual one is a name match in a
+ * file that imports the package, which is a lead. Only the weaker and the
+ * indirect cases are annotated — labelling every resolved line would bury the
+ * ones that need a second look.
+ */
+function siteQualifier(site: UsageSite): string {
+  const notes: string[] = [];
+  if (site.via === 'textual') notes.push('text match');
+  if (site.indirect) notes.push(site.indirect);
+  return notes.length > 0 ? ` (${notes.join('; ')})` : '';
+}
+
+/**
  * gen.md section 14. Without a correlation pass we say so and list what to grep
  * for; we never present "symbols named in the changelog" as "your affected files".
  */
@@ -148,7 +164,7 @@ function renderRepositoryImpact(findings: KnowledgeObject[], impact?: Repository
 
     lines.push(`### ${file}`, '');
     for (const site of sites.slice(0, 6)) {
-      lines.push(`- \`${site.symbol}\` at line ${site.line} — \`${site.text.slice(0, 120)}\``);
+      lines.push(`- \`${site.symbol}\` at line ${site.line}${siteQualifier(site)} — \`${site.text.slice(0, 120)}\``);
     }
     lines.push('');
   }
@@ -365,6 +381,44 @@ export function renderErrorAnalysis(resolution: ErrorResolution): string {
   return lines.join('\n');
 }
 
+/**
+ * The caveat has to match what actually happened to this repository. Claiming
+ * "aliased imports are not detected" understates a parsed scan; claiming full
+ * module-graph resolution overstates a Python or config-heavy one. So the text
+ * is assembled from the counts.
+ */
+function caveatLines(impact: RepositoryImpact): string[] {
+  const lines: string[] = [];
+
+  if (impact.scanned.parsed > 0) {
+    lines.push(
+      `${impact.scanned.parsed} module(s) were parsed, so renamed imports (\`import { render as r }\`),`,
+      'namespace members, and barrel re-exports were followed to the name the package',
+      'actually exports. Computed access (`obj[name]`) and names shadowed by a local',
+      'declaration are reported as leads or dropped, never resolved.',
+    );
+  }
+
+  if (impact.scanned.unparsed > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push(
+      `${impact.scanned.unparsed} module(s) could not be parsed and fell back to text matching,`,
+      'as do Python, config, and single-file components. Those sites are marked',
+      '`text match`: the name appears in a file that imports the package, which is not',
+      'the same as a resolved binding.',
+    );
+  }
+
+  if (lines.length === 0) {
+    lines.push(
+      'Correlation is gated on import sites. Treat this as a strong lead, not a proof',
+      'of complete coverage.',
+    );
+  }
+
+  return lines;
+}
+
 /** gen.md section 27: `repository-impact.md`, as a standalone document. */
 export function renderRepositoryImpactDocument(
   impact: RepositoryImpact,
@@ -377,6 +431,7 @@ export function renderRepositoryImpactDocument(
     '',
     `**Repository:** \`${impact.repository}\``,
     `**Scanned:** ${impact.scanned.files} files (${impact.scanned.skipped} skipped)${impact.scanned.truncated ? ' — truncated' : ''}`,
+    `**Resolution:** ${impact.scanned.parsed} module(s) parsed, ${impact.scanned.unparsed} matched textually`,
     `**Uses package:** ${impact.usesPackage ? 'yes' : 'no'}`,
     '',
     '## Summary',
@@ -417,9 +472,7 @@ export function renderRepositoryImpactDocument(
   lines.push(
     '## Caveat',
     '',
-    'Correlation is regex-based, gated on import sites. Aliased imports',
-    '(`import { render as r }`), re-exports, and dynamic access (`obj[name]`) are not',
-    'detected — treat this as a strong lead, not a proof of complete coverage.',
+    ...caveatLines(impact),
     '',
   );
 
@@ -472,4 +525,95 @@ export function renderDocuments(
     'migration.md': ranked.map((result) => renderMigrationPlan(result, impacts[result.package])).join('\n\n---\n\n'),
     'breaking-changes.md': ranked.map(renderBreakingChanges).join('\n\n---\n\n'),
   };
+}
+
+/**
+ * gen.md section 10: the graph as the tree the spec draws.
+ *
+ * A node-and-edge list is the right structure to query and the wrong one to
+ * read. This renders the same projection the way section 10 illustrates it —
+ * package, versions, and what each version introduces or fixes — and says so
+ * when a version has nothing attached rather than printing a bare stub.
+ */
+export function renderKnowledgeGraph(graph: KnowledgeGraph, packageName: string): string {
+  const versions = graph.nodes
+    .filter((node) => node.type === 'version')
+    .sort((a, b) => compareStrings(a.version ?? '', b.version ?? ''));
+
+  // Knowledge that names no version cannot hang off one. It is still knowledge,
+  // so it gets its own branch rather than vanishing from the picture.
+  const versionIds = new Set(versions.map((node) => node.id));
+  const unanchored = graph.nodes.filter(
+    (node) =>
+      (node.type === 'breaking_change' || node.type === 'change' || node.type === 'error') &&
+      !graph.edges.some(
+        (edge) =>
+          (edge.from === node.id && versionIds.has(edge.to)) ||
+          (edge.to === node.id && versionIds.has(edge.from)),
+      ),
+  );
+
+  if (versions.length === 0 && unanchored.length === 0) {
+    return `${packageName}\n └── (no versioned knowledge indexed)`;
+  }
+
+  const lines = [packageName];
+
+  versions.forEach((version, index) => {
+    const last = index === versions.length - 1 && unanchored.length === 0;
+    lines.push(` ${last ? '└──' : '├──'} version ${version.version}`);
+
+    const branch = last ? '    ' : ' │  ';
+
+    // Grouped rather than emitted in edge order: a reader scanning a version
+    // wants all of its changes together, not changes interleaved with releases.
+    const breakingChanges: string[] = [];
+    const changes: string[] = [];
+    const errors: string[] = [];
+    const fixes: string[] = [];
+    const releases: string[] = [];
+
+    for (const edge of graph.edges) {
+      if (edge.relation === 'INTRODUCES' && edge.from === version.id) {
+        const claim = findNode(graph, edge.to);
+        // Breaking and non-breaking are labelled apart, and the breaking ones
+        // come first: a tree where a docs fix reads the same as a removed API,
+        // or buries it, is worse than no tree.
+        if (claim?.type === 'breaking_change') breakingChanges.push(`breaking: ${claim.label}`);
+        else if (claim) changes.push(`change: ${claim.label}`);
+      }
+      if (edge.relation === 'AFFECTS' && edge.to === version.id) {
+        const claim = findNode(graph, edge.from);
+        if (claim?.type === 'error') errors.push(`known error: ${claim.label}`);
+      }
+      if (edge.relation === 'FIXED_BY' && edge.to === version.id) {
+        const claim = findNode(graph, edge.from);
+        if (claim) fixes.push(`fixes: ${claim.label}`);
+      }
+      if (edge.relation === 'HAS_RELEASE' && edge.from === version.id) {
+        const release = findNode(graph, edge.to);
+        if (release) releases.push(`release: ${release.label}`);
+      }
+    }
+
+    const children = [...breakingChanges, ...changes, ...errors, ...fixes, ...releases];
+
+    if (children.length === 0) {
+      lines.push(`${branch}   └── (referenced only as a version boundary)`);
+      return;
+    }
+
+    children.forEach((child, childIndex) => {
+      lines.push(`${branch}   ${childIndex === children.length - 1 ? '└──' : '├──'} ${child}`);
+    });
+  });
+
+  if (unanchored.length > 0) {
+    lines.push(' └── (no version stated)');
+    unanchored.forEach((node, index) => {
+      lines.push(`       ${index === unanchored.length - 1 ? '└──' : '├──'} ${node.label}`);
+    });
+  }
+
+  return lines.join('\n');
 }

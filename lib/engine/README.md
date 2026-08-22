@@ -31,10 +31,14 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 | `analysis/dedupe.ts` | Fingerprint + semantic dedupe, evidence merging (section 12) |
 | `analysis/confidence.ts` | Confidence scoring and assertion threshold (sections 13, 21) |
 | `analysis/errorFingerprint.ts` | Error normalization and fingerprinting (section 7) |
+| `analysis/ast.ts` | TypeScript-parser module facts: bindings, member paths, re-exports |
 | `analysis/repository.ts` | Repository correlation: which files actually use the change (section 14) |
 | `analysis/versionDiff.ts` | Delta classification and risk assessment (section 4) |
 | `index/store.ts` | Hybrid retrieval: BM25 + metadata + hard version filtering (section 11) |
-| `index/embeddings.ts` | Embedder seam — Phase 2 |
+| `index/embeddings.ts` | Embedder seam — provider-agnostic, degrades to lexical |
+| `index/voyage.ts` | Voyage AI embedder: the only file that names a vendor |
+| `index/backfill.ts` | Adds vectors to indexed knowledge, resumable and idempotent |
+| `index/graph.ts` | Knowledge graph projected from the index (section 10) |
 | `feedback.ts` | Verified-fix write-back, reinforcement and refutation (section 20) |
 | `pipeline.ts` | Upgrade research orchestration |
 | `errorPipeline.ts` | Error resolution orchestration (sections 8, 19) |
@@ -51,7 +55,8 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 | `POST /api/scrape` | Acquisition only, no analysis |
 | `POST /api/search` | Hybrid retrieval over the index. Never scrapes |
 | `GET  /api/index` | Index statistics and capability report |
-| `POST /api/index` | Index a package on demand |
+| `POST /api/index` | Index a package on demand, or `{"action":"backfill"}` to embed |
+| `GET  /api/graph` | Package knowledge graph; `?format=tree` for the section 10 diagram |
 | `POST /api/errors/analyze` | Diagnose an error against the index, research if insufficient |
 | `POST /api/repositories/analyze` | Read a repo's manifest, research it, correlate findings to files |
 | `POST /api/agent/resolve` | Agent protocol: package changes + errors in one call (section 16) |
@@ -78,6 +83,10 @@ Code (section 17) and `generic/AGENT.md` for any other harness (section 18).
 | `BRIGHTDATA_ZONE` | Unlocker zone. Defaults to `web_unlocker1` |
 | `BRIGHTDATA_SERP_ZONE` | SERP zone. Without it, search discovery is skipped, not failed |
 | `GITHUB_TOKEN` | Raises the GitHub API rate limit from 60/hour |
+| `VOYAGE_API_KEY` | Enables semantic retrieval. Without it, ranking is lexical only |
+| `VOYAGE_MODEL` | Embedding model. Defaults to `voyage-3.5-lite` (1024 dimensions) |
+| `VOYAGE_RPM` | Paces requests. Set to `3` on a key with no payment method on file |
+| `VOYAGE_BATCH_TOKENS` | Tokens per request. Defaults to 7000, under the free 10K/min cap |
 | `UPGRADE_INTEL_DATA_DIR` | Index and cache location. Defaults to `.upgrade-intel/` |
 
 `GET /api/index` reports which of these are active.
@@ -89,9 +98,15 @@ bun test lib/engine     # or: bun run test
 bun run typecheck
 ```
 
-139 tests. The pure units — semver, error fingerprinting, document normalization,
+219 tests. The pure units — semver, error fingerprinting, document normalization,
 extraction, confidence, dedupe, the store, manifest parsing, repository
-correlation, and feedback — are tested directly.
+correlation, embeddings, the knowledge graph, and feedback — are tested directly.
+
+`embeddings.test.ts` injects the HTTP call into the Voyage client and registers a
+deterministic fake embedder, so the suite never needs a key and never touches the
+network. What it pins is the behaviour under failure: a 401 is not retried, a 429
+is, a chunk that fails leaves the vectors already written in place, and a vector
+from a superseded model is ignored rather than scored.
 
 `pipeline.test.ts` covers orchestration (budget accounting, index-first
 short-circuiting, release-selection fallbacks) by stubbing `globalThis.fetch`
@@ -125,20 +140,51 @@ matching prose in page metadata.
 
 ## Known limitations
 
-- **Retrieval is lexical only.** `index/embeddings.ts` defines the contract but no
-  embedder is registered, so an error phrased differently from the changelog
-  ("params should be awaited" vs "Dynamic APIs are now async") will not match.
-  This is the Phase 2 seam: register an embedder, backfill, and `search()` blends
-  a semantic score automatically.
+- **Retrieval is hybrid only when a key is set.** With `VOYAGE_API_KEY`, queries
+  and stored claims are embedded and `search()` blends a semantic score, so an
+  error phrased differently from the changelog ("params should be awaited" vs
+  "Dynamic APIs are now async") still matches. Without it, ranking is BM25 plus
+  metadata, and that phrasing gap is a miss. Nothing fails either way: a missing
+  key, a failed embedding request, or a vector from a superseded model all fall
+  back to the lexical score rather than erroring or scoring noise.
+- **Vectors are added after indexing, not during it.** Research must work with no
+  embedder configured, so the pipelines write `embedding: null` and
+  `backfillEmbeddings()` fills it in — automatically after `POST /api/index`, or
+  on demand via `POST /api/index {"action":"backfill"}`. Until that runs, new
+  knowledge is reachable lexically but not semantically.
+- **The graph adds one node type the spec does not list.** Section 10 names
+  `BREAKING_CHANGE` but nothing for a bug fix or a docs change, which is most of
+  what a release contains. Filing those under `BREAKING_CHANGE` would make a
+  release of 25 fixes read as 25 things that break you, and dropping them would
+  make the graph report less than the index holds — so they become `change`
+  nodes, with `knowledgeType` carrying what they actually are.
+- **The knowledge graph is derived, never stored.** `index/graph.ts` projects the
+  section 10 entities and relations out of the indexed knowledge objects on every
+  request, so it cannot go stale and there is no second source of truth to
+  reconcile. gen.md says not to reach for a graph database without demonstrated
+  need, and there is none: the relations it names are already implied by fields
+  the objects carry. The cost is that a relation nothing asserts does not exist —
+  the graph knows what was extracted, not what is true.
+- **Extraction rules tighten over time; the index does not follow.** Entries
+  written before a rule was added stay until they are removed. `upgrade-intel
+  prune` re-applies the housekeeping filter to what is already stored and is dry
+  by default. It is the one rule cheap enough to re-run without the source
+  document; everything else needs `--refresh` re-research.
 - **Extraction is deterministic.** It classifies by heading, conventional-commit
   prefix, and prose pattern. It will not summarise or infer a migration that the
   source does not state. `refineWithModel` in `extract.ts` is the seam for an LLM
   pass, which may improve wording but may not introduce claims.
-- **Repository correlation is regex-based, not AST-based.** Import sites gate
-  symbol sites and comments/strings are blanked before matching, which removes
-  most false positives — but re-exports, aliased imports (`import { render as r }`),
-  and dynamic access (`obj[name]`) are missed. Treat `affectedFiles` as a strong
-  lead, not a proof.
+- **Repository correlation parses what it can and greps the rest.** JavaScript
+  and TypeScript modules are parsed with the TypeScript compiler API (parser only
+  — no program, no type checker), so renamed imports (`import { render as r }`),
+  namespace members, `require` destructuring, and barrel re-exports resolve to the
+  name the package actually exports. Everything else — Python, config, single-file
+  components, and any file that fails to parse — falls back to regex gated on
+  import sites, where those cases are missed. Each site carries `via: 'parsed' |
+  'textual'`, and `scanned.parsed` / `scanned.unparsed` say which path a file took.
+  `typescript` is a devDependency: if it is absent the whole scan degrades to
+  regex rather than failing. Computed access (`obj[name]`) and names shadowed by a
+  local declaration are never resolved — they are flagged as indirect or dropped.
 - **Confidence weights follow gen.md section 21 literally.** A single official
   source scores ~0.35 ("Low"), below the 0.75 assertion threshold, so
   single-source findings are presented as unconfirmed. Retune `confidence.ts` if

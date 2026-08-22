@@ -27,6 +27,19 @@ Then:
    ```
    Use `affectedFiles` and `affectedSymbols`. If `usesPackage` is `false`, the
    upgrade cannot break this repository through its API — stop.
+
+   Each site carries how it was found. Treat them differently:
+
+   | Field | Meaning | What to do |
+   | --- | --- | --- |
+   | `via: "parsed"` | The binding was resolved through the module graph | Trust it |
+   | `via: "textual"` | A name matched in a file that imports the package | Open the file and confirm before editing |
+   | `indirect: "via <file>"` | Reached through a barrel or re-export | Real, but the import you see is not the package |
+   | `indirect: "computed access"` | Reached via `obj[name]` | A lead only — the engine could not resolve it |
+
+   `scanned.parsed` and `scanned.unparsed` say how much of the repository got
+   which treatment. A high `unparsed` count means the findings are weaker than
+   they look.
 3. Apply the smallest change that the evidence supports. One breaking change at a time.
 4. Validate: `bun test`, `bun run typecheck`, `bun run build` (or this repo's equivalents).
 5. Report the outcome so the index learns (see below).
@@ -74,6 +87,10 @@ upgrade-intel report \
 - **Prefer upgrading to patching** when `fixedVersions` shows the bug is already fixed.
 - Regenerate any generated artifacts (Prisma client, GraphQL types, protobufs)
   before concluding a migration failed.
+- **Check `upgrade-intel stats` before trusting a `search` miss.** If it reports
+  `retrieval is lexical only`, a phrasing that differs from the changelog will not
+  match, and "nothing found" means nothing was found *by keyword*. If it reports
+  objects with no vector, run `upgrade-intel backfill` first.
 
 ## Other commands
 
@@ -81,8 +98,16 @@ upgrade-intel report \
 upgrade-intel search "<query>" --package <p> --version <v>   # index only, never scrapes
 upgrade-intel sources <package>                              # what would be researched
 upgrade-intel index <package> --from <version>               # warm the index
+upgrade-intel graph <package> [--version <v>]                # what each version broke and what fixed it
+upgrade-intel backfill                                       # embed indexed knowledge for semantic search
+upgrade-intel prune                                          # list index entries the current rules reject
 upgrade-intel stats                                          # index size, capabilities
 ```
+
+`graph` is the fastest way to answer "which version fixes this" — it walks
+`ERROR ─FIXED_BY→ VERSION` rather than re-reading every finding. It labels
+`breaking:` separately from `change:`, so a release of bug fixes does not read
+as a release of breakage.
 
 Add `--fail-on HIGH` to `migrate` or `repo` to exit `2` when risk reaches a
 threshold — useful for gating CI.

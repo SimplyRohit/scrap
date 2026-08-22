@@ -221,7 +221,7 @@ describe('repository impact document', () => {
     affectedFiles: ['src/a.ts'],
     affectedSymbols: ['legacy()'],
     applicableKnowledge: ['k_1'],
-    scanned: { files: 10, skipped: 0, truncated: false },
+    scanned: { files: 10, skipped: 0, truncated: false, parsed: 10, unparsed: 0 },
     ...overrides,
   });
 
@@ -243,8 +243,55 @@ describe('repository impact document', () => {
     expect(doc).toContain('Findings this repository can actually be hit by: 1');
   });
 
-  test('states the limits of regex correlation', () => {
+  test('claims module-graph resolution only for the files that were parsed', () => {
     const doc = renderRepositoryImpactDocument(impact(), [knowledge()]);
-    expect(doc).toContain('not a proof of complete coverage');
+
+    expect(doc).toContain('10 module(s) were parsed');
+    expect(doc).toContain('import { render as r }');
+    // Nothing fell back, so the document must not hedge as though something did.
+    expect(doc).not.toContain('fell back to text matching');
+  });
+
+  test('discloses the fallback when some files could not be parsed', () => {
+    const doc = renderRepositoryImpactDocument(
+      impact({ scanned: { files: 10, skipped: 0, truncated: false, parsed: 6, unparsed: 4 } }),
+      [knowledge()],
+    );
+
+    expect(doc).toContain('6 module(s) parsed, 4 matched textually');
+    expect(doc).toContain('4 module(s) could not be parsed');
+  });
+
+  test('marks a textual site so it is not read as a resolved binding', () => {
+    const doc = renderRepositoryImpactDocument(
+      impact({
+        symbolSites: [{ file: 'src/a.py', line: 2, text: 'legacy()', symbol: 'legacy()', via: 'textual' }],
+        importSites: [],
+        affectedFiles: ['src/a.py'],
+      }),
+      [knowledge()],
+    );
+
+    expect(doc).toContain('(text match)');
+  });
+
+  test('discloses indirection rather than presenting it as direct use', () => {
+    const doc = renderRepositoryImpactDocument(
+      impact({
+        symbolSites: [
+          {
+            file: 'src/a.ts',
+            line: 2,
+            text: 'oldLegacy()',
+            symbol: 'legacy()',
+            via: 'parsed',
+            indirect: 'via src/lib/barrel.ts',
+          },
+        ],
+      }),
+      [knowledge()],
+    );
+
+    expect(doc).toContain('(via src/lib/barrel.ts)');
   });
 });

@@ -27,9 +27,14 @@ import {
   yellow,
 } from './format';
 
+import { isRepositoryHousekeeping } from '../lib/engine/analysis/extract';
 import { applicableKnowledge, correlateRepository } from '../lib/engine/analysis/repository';
+import { initializeEngine } from '../lib/engine/bootstrap';
 import { isBreaking, type RiskLevel } from '../lib/engine/analysis/versionDiff';
 import { recordFixOutcome } from '../lib/engine/feedback';
+import { backfillEmbeddings } from '../lib/engine/index/backfill';
+import { embedQuery } from '../lib/engine/index/embeddings';
+import { buildKnowledgeGraph, subgraph } from '../lib/engine/index/graph';
 import { getStore } from '../lib/engine/index/store';
 import { applyLockfileVersions, detectEcosystem, parseManifest } from '../lib/engine/ingestion/manifest';
 import { resolveError } from '../lib/engine/errorPipeline';
@@ -37,6 +42,7 @@ import type { Ecosystem, KnowledgeObject } from '../lib/engine/knowledge';
 import {
   renderDocuments,
   renderErrorAnalysis,
+  renderKnowledgeGraph,
   renderMigrationPlan,
   renderRepositoryImpactDocument,
 } from '../lib/engine/output/markdown';
@@ -59,6 +65,9 @@ ${bold('Commands')}
   repo [path]                              Analyse a repository's manifest end to end
   search <query>                           Search the knowledge index (never scrapes)
   index <name> --from <version>            Index a package on demand
+  graph <name> [--version <v>]             Show the knowledge graph for a package
+  backfill                                 Embed indexed knowledge (needs VOYAGE_API_KEY)
+  prune                                    Drop indexed entries the current rules reject
   sources <name>                           Show the sources that would be researched
   report --package <p> --summary <s>       Record a fix outcome (validation feedback)
   stats                                    Index statistics and engine capabilities
@@ -360,11 +369,16 @@ async function commandSearch(args: ParsedArgs): Promise<number> {
 
   if (!query && !packageName) fail('usage: upgrade-intel search <query> [--package <name>]');
 
+  // Semantic scoring when a provider is configured; lexical otherwise. Both
+  // paths return results, so this never gates the command.
+  initializeEngine();
+
   const results = await getStore().search({
     text: query || undefined,
     package: packageName,
     version: stringFlag(args.flags, 'version', 'v'),
     limit: numberFlag(args.flags, 'limit') ?? 10,
+    embedding: query ? await embedQuery(query) : null,
   });
 
   if (boolFlag(args.flags, 'json')) {
@@ -501,6 +515,7 @@ async function commandStats(args: ParsedArgs): Promise<number> {
     brightData: brightDataConfigured(),
     brightDataSerp: serpConfigured(),
     github: Boolean(process.env.GITHUB_TOKEN),
+    embeddings: initializeEngine(),
   };
 
   if (boolFlag(args.flags, 'json')) {
@@ -526,8 +541,106 @@ async function commandStats(args: ParsedArgs): Promise<number> {
     process.stdout.write(`  ${active ? green('on ') : dim('off')}  ${name}\n`);
   }
   // Retrieval quality depends on this, so it is worth stating plainly.
-  process.stdout.write(`  ${dim('off')}  embeddings ${dim('(retrieval is lexical only)')}\n`);
+  if (!capabilities.embeddings) {
+    process.stdout.write(`  ${dim('retrieval is lexical only — set VOYAGE_API_KEY for semantic search')}\n`);
+  } else if (stats.withEmbeddings < stats.total) {
+    process.stdout.write(
+      `  ${dim(`${stats.total - stats.withEmbeddings} object(s) have no vector — run \`upgrade-intel backfill\``)}\n`,
+    );
+  }
 
+  return 0;
+}
+
+async function commandGraph(args: ParsedArgs): Promise<number> {
+  const packageName = args.positional[0];
+  if (!packageName) fail('usage: upgrade-intel graph <package> [--version <version>]');
+
+  const version = stringFlag(args.flags, 'version', 'v');
+  const knowledge = (await getStore().all()).filter((item) => item.package === packageName);
+
+  if (knowledge.length === 0) {
+    process.stdout.write(
+      dim(`Nothing indexed for ${packageName}. Run \`upgrade-intel index ${packageName} --from <version>\` first.\n`),
+    );
+    return 0;
+  }
+
+  const graph = subgraph(buildKnowledgeGraph(knowledge), { package: packageName, version });
+
+  if (boolFlag(args.flags, 'json')) {
+    emitJson(graph);
+    return 0;
+  }
+
+  process.stdout.write(`${renderKnowledgeGraph(graph, packageName)}\n`);
+  return 0;
+}
+
+async function commandBackfill(args: ParsedArgs): Promise<number> {
+  if (!initializeEngine()) {
+    fail('no embedding provider configured — set VOYAGE_API_KEY');
+  }
+
+  const result = await backfillEmbeddings({
+    limit: numberFlag(args.flags, 'limit'),
+    refresh: boolFlag(args.flags, 'refresh'),
+  });
+
+  if (boolFlag(args.flags, 'json')) {
+    emitJson(result);
+    return result.failures.length > 0 ? 1 : 0;
+  }
+
+  process.stdout.write(
+    `${result.embedded} embedded with ${result.model}, ${result.remaining} remaining\n`,
+  );
+  for (const failure of result.failures) {
+    process.stderr.write(`${red('failed')} ${failure}\n`);
+  }
+  // Partial progress is still progress: the next run resumes where this stopped.
+  return result.failures.length > 0 ? 1 : 0;
+}
+
+/**
+ * Removes knowledge that the current extraction rules would never have indexed.
+ *
+ * Extraction rules get tightened as false positives are found, but the index
+ * keeps what earlier runs wrote. Re-researching every package to clear it out
+ * costs a full scrape; this re-applies one rule to what is already stored.
+ * Dry by default — deleting knowledge is not something to do on a typo.
+ */
+async function commandPrune(args: ParsedArgs): Promise<number> {
+  const store = getStore();
+  const doomed = (await store.all()).filter((item) => isRepositoryHousekeeping(item.title));
+  const apply = boolFlag(args.flags, 'apply');
+
+  if (boolFlag(args.flags, 'json')) {
+    emitJson({
+      applied: apply,
+      count: doomed.length,
+      entries: doomed.map((item) => ({ id: item.id, package: item.package, type: item.type, title: item.title })),
+    });
+    if (apply) await store.remove(doomed.map((item) => item.id));
+    return 0;
+  }
+
+  if (doomed.length === 0) {
+    process.stdout.write(dim('Nothing to prune.\n'));
+    return 0;
+  }
+
+  for (const item of doomed) {
+    process.stdout.write(`  ${dim(item.package.padEnd(14))} ${dim(item.type.padEnd(14))} ${item.title.slice(0, 70)}\n`);
+  }
+
+  if (!apply) {
+    process.stdout.write(`\n${doomed.length} entr${doomed.length === 1 ? 'y' : 'ies'} would be removed. Re-run with --apply.\n`);
+    return 0;
+  }
+
+  const removed = await store.remove(doomed.map((item) => item.id));
+  process.stdout.write(`\n${green(String(removed))} removed.\n`);
   return 0;
 }
 
@@ -538,6 +651,9 @@ const COMMANDS: Record<string, (args: ParsedArgs) => Promise<number>> = {
   repo: commandRepo,
   search: commandSearch,
   index: commandIndex,
+  graph: commandGraph,
+  backfill: commandBackfill,
+  prune: commandPrune,
   sources: commandSources,
   report: commandReport,
   stats: commandStats,

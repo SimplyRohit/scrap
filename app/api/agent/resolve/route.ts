@@ -5,6 +5,7 @@ import {
   correlateRepository,
   type RepositoryImpact,
 } from '@/lib/engine/analysis/repository';
+import { initializeEngine } from '@/lib/engine/bootstrap';
 import { resolveError, type ErrorResolution } from '@/lib/engine/errorPipeline';
 import { detectEcosystem } from '@/lib/engine/ingestion/manifest';
 import type { Ecosystem, KnowledgeObject } from '@/lib/engine/knowledge';
@@ -41,6 +42,9 @@ interface ErrorInput {
  */
 export async function POST(req: NextRequest) {
   try {
+    // Enables semantic retrieval when a provider is configured; harmless otherwise.
+    initializeEngine();
+
     const body = (await req.json()) as {
       repository?: string;
       packageChanges?: PackageChangeInput[];

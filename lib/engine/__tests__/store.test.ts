@@ -229,3 +229,27 @@ describe('deduplication', () => {
     expect(result.contradictions).toHaveLength(1);
   });
 });
+
+describe('removal', () => {
+  test('deletes by id and reports how many existed', async () => {
+    const store = await freshStore();
+    await store.upsert([
+      knowledge({ id: 'k_keep', fingerprint: 'fp_keep' }),
+      knowledge({ id: 'k_drop', fingerprint: 'fp_drop' }),
+    ]);
+
+    // One real id and one that was already gone: the count reflects what was
+    // actually deleted, so a caller can tell a no-op from a deletion.
+    expect(await store.remove(['k_drop', 'k_absent'])).toBe(1);
+    expect((await store.all()).map((item) => item.id)).toEqual(['k_keep']);
+  });
+
+  test('removing nothing does not rewrite the index', async () => {
+    const store = await freshStore();
+    await store.upsert([knowledge({ id: 'k_1', fingerprint: 'fp_1' })]);
+    const before = (await store.stats()).lastUpdated;
+
+    expect(await store.remove([])).toBe(0);
+    expect((await store.stats()).lastUpdated).toBe(before);
+  });
+});
