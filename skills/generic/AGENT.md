@@ -56,30 +56,46 @@ Diagnostics go to stderr. Exit codes:
 
 ## HTTP
 
-Against the deployment at `https://rift-cli.vercel.app`, or a local
-`bun run dev` on `http://localhost:3000`:
+The backend is Convex. Its HTTP API is served from the deployment host, not from
+the marketing site:
+
+```
+https://rightful-otter-494.eu-west-1.convex.site
+```
+
+A local `bunx convex dev` prints its own host; `NEXT_PUBLIC_CONVEX_SITE_URL` in
+`.env.local` holds it.
 
 | Endpoint | Purpose |
 | --- | --- |
 | `POST /api/research` | Research one package upgrade |
 | `POST /api/analyze` | Risk for a whole `dependencies` map |
 | `POST /api/parse` | Parse a manifest into dependencies |
+| `POST /api/scrape` | Research a `dependencies` array and index what it finds |
 | `POST /api/errors/analyze` | Diagnose an error |
-| `POST /api/repositories/analyze` | Manifest + correlation for a repository |
 | `POST /api/search` | Query the index; never scrapes |
 | `POST /api/agent/resolve` | Package changes and errors in one call |
 | `POST /api/agent/report` | Record a fix outcome |
 | `GET /api/index` | Index statistics and capabilities |
 | `POST /api/index` | Index a package, or `{"action":"backfill"}` to embed knowledge |
 | `GET /api/graph` | Package knowledge graph; `?format=tree` for a readable diagram |
+| `GET /api/analyses?id=` | Poll a running analysis |
 
-The deployment keeps no index — its filesystem resets between requests — so
-every call there researches from scratch. Prefer the CLI for repeated work: it
-keeps a warm index on the machine that is asking.
+The index is shared and it persists. Every call adds to the same store, so a
+package someone else researched is already answered for you — which the CLI's
+own index, private to one machine, cannot do. `GET /api/index` reports `total`,
+`withEmbeddings`, and which capabilities the deployment has keys for.
+
+`POST /api/repositories/analyze` is **not** on this host; it answers 501 there.
+Correlating findings against source means reading the working tree, which a
+hosted backend cannot see. Run `rift repo .`, or call that one route against a
+local `bun run dev` on `http://localhost:3000`.
 
 Three further routes exist only to lend the deployment's credentials to a CLI
 that has none: `POST /api/relay/fetch`, `/api/relay/search`, `/api/relay/embed`.
-Call them through `rift`, not directly.
+They answer on both hosts — `https://rift-cli.vercel.app` forwards to Convex,
+and that forwarding URL is compiled into every published CLI. Call them through
+`rift`, not directly.
 
 ## The loop
 
@@ -90,7 +106,7 @@ POST /api/errors/analyze   { package, version, error, stackTrace }
    ↓
 inspect evidence[] — apply only confidence >= 0.75
    ↓
-POST /api/repositories/analyze  → affectedFiles
+POST /api/repositories/analyze  → affectedFiles   (local host, or `rift repo .`)
    ↓
 edit only those files
    ↓
