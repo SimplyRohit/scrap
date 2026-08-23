@@ -18,10 +18,14 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 | `knowledge.ts` | Canonical knowledge model, source types, trust ladder |
 | `request.ts` | `KnowledgeRequest` — the single ingestion interface (section 24) |
 | `semver.ts` | Dependency-free semver subset: compare, delta, range satisfaction |
+| `text.ts` | Normalization and tokenization. Pure, so retrieval can run anywhere |
+| `hash.ts` | SHA-256 content hashing. `node:crypto`, so Node-only |
+| `capabilities.ts` | Which transports this deployment is configured for |
 | `ingestion/manifest.ts` | package.json / requirements.txt / pyproject parsing, lockfile overlay |
 | `ingestion/resolve.ts` | Target-version resolution against the registry |
 | `research/fetcher.ts` | Bright Data transport, direct fallback, cache integration |
-| `research/cache.ts` | Per-source-type TTLs, ETag / Last-Modified revalidation (section 22) |
+| `research/cache.ts` | `CacheBackend` seam and the filesystem implementation (section 22) |
+| `research/cachePolicy.ts` | Per-source-type TTLs and ETag / Last-Modified revalidation |
 | `research/sources.ts` | Source prioritisation and URL classification (section 5) |
 | `research/registry.ts` | npm and PyPI clients |
 | `research/github.ts` | Releases, issue search, in-repo files |
@@ -34,7 +38,10 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 | `analysis/ast.ts` | TypeScript-parser module facts: bindings, member paths, re-exports |
 | `analysis/repository.ts` | Repository correlation: which files actually use the change (section 14) |
 | `analysis/versionDiff.ts` | Delta classification and risk assessment (section 4) |
-| `index/store.ts` | Hybrid retrieval: BM25 + metadata + hard version filtering (section 11) |
+| `index/contract.ts` | The `KnowledgeStore` interface every backend implements |
+| `index/ranking.ts` | Hybrid retrieval: BM25 + metadata + hard version filtering (section 11) |
+| `index/merge.ts` | Upsert and patch semantics, shared by every backend |
+| `index/store.ts` | The filesystem `KnowledgeStore`. The Convex one is in `convex/` |
 | `index/embeddings.ts` | Embedder seam — provider-agnostic, degrades to lexical |
 | `index/voyage.ts` | Voyage AI embedder: the only file that names a vendor |
 | `index/backfill.ts` | Adds vectors to indexed knowledge, resumable and idempotent |
@@ -46,23 +53,60 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 | `output/markdown.ts` | `analysis.md`, `migration.md`, `breaking-changes.md`, `error-analysis.md`, `repository-impact.md` (section 27) |
 | `adapters/legacy.ts` | Projection onto the existing blast-radius view model |
 
-## HTTP API
+## Backend
 
-| Endpoint | Purpose |
-| --- | --- |
-| `POST /api/parse` | Manifest -> packages with registry-resolved targets |
-| `POST /api/research` | Research one package upgrade, index the result |
-| `POST /api/analyze` | Research a whole manifest, return the blast-radius view |
-| `POST /api/scrape` | Acquisition only, no analysis |
-| `POST /api/search` | Hybrid retrieval over the index. Never scrapes |
-| `GET  /api/index` | Index statistics and capability report |
-| `POST /api/index` | Index a package on demand, or `{"action":"backfill"}` to embed |
-| `rift mcp` | The same engine over MCP on stdio (section 18) |
-| `GET  /api/graph` | Package knowledge graph; `?format=tree` for the section 10 diagram |
-| `POST /api/errors/analyze` | Diagnose an error against the index, research if insufficient |
-| `POST /api/repositories/analyze` | Read a repo's manifest, research it, correlate findings to files |
-| `POST /api/agent/resolve` | Agent protocol: package changes + errors in one call (section 16) |
-| `POST /api/agent/report` | Write-back: record a fix outcome, reinforce or refute (section 20) |
+The engine is a library with two things left pluggable: where knowledge is
+stored (`KnowledgeStore`) and where fetched documents are cached
+(`CacheBackend`). The CLI fills both with the filesystem. The deployed backend
+fills both with Convex — see [`convex/README.md`](../../convex/README.md) — and
+adds the scheduler that makes a manifest analysis something you can watch
+instead of wait for.
+
+Two consequences shape this directory:
+
+- **Retrieval must run in the Convex runtime**, where Node built-ins do not
+  exist. That is why tokenization (`text.ts`), ranking (`index/ranking.ts`),
+  merge rules (`index/merge.ts`), the store contract (`index/contract.ts`) and
+  cache policy (`research/cachePolicy.ts`) are pure, and why hashing sits apart
+  from them in `hash.ts`. `lib/__tests__/convexRuntime.test.ts` walks the import
+  graph and fails if that line is ever crossed.
+- **Research runs in a Node action**, so everything under `research/` and
+  `analysis/` may use `node:crypto`, `cheerio`, and the rest.
+
+### API
+
+| Convex function | HTTP | Purpose |
+| --- | --- | --- |
+| `manifests.parse` | `POST /api/parse` | Manifest -> packages with registry-resolved targets |
+| `research.packageUpgrade` | `POST /api/research`, `POST /api/index` | Research one package upgrade, index the result |
+| `analyses.start`, `.get`, `.blastRadius` | `POST /api/analyze`, `GET /api/analyses?id=` | Research a whole manifest; see below |
+| `research.scrape` | `POST /api/scrape` | Acquisition only, no analysis |
+| `knowledge.search`, `.searchWithConfidence` | `POST /api/search` | Hybrid retrieval over the index. Never scrapes |
+| `knowledge.stats` | `GET /api/index` | Index statistics and capability report |
+| `embeddings.runBackfill` | `POST /api/index {"action":"backfill"}` | Embed indexed knowledge that has no current vector |
+| `graph.forPackage` | `GET /api/graph?package=` | Package knowledge graph (section 10) |
+| `errors.analyze` | `POST /api/errors/analyze` | Diagnose an error against the index, research if insufficient |
+| `agent.resolve` | `POST /api/agent/resolve` | Agent protocol: package changes + errors in one call (section 16) |
+| `agent.report` | `POST /api/agent/report` | Write-back: record a fix outcome, reinforce or refute (section 20) |
+| — | `POST /api/relay/{fetch,search,embed}` | Lends this deployment's keys to a caller with none |
+| — | `POST /api/repositories/analyze` | Read a repo's manifest, research it, correlate findings to files |
+| — | `rift mcp` | The same engine over MCP on stdio (section 18) |
+
+Three of those changed shape when the backend moved, each deliberately:
+
+- **`POST /api/analyze` no longer blocks.** Researching a manifest routinely
+  outlives an HTTP request, so it returns an `analysisId` and the work is
+  scheduled. Poll `GET /api/analyses?id=`, or — from the app — subscribe to
+  `analyses.get` and watch each package land.
+- **`POST /api/repositories/analyze` is still a Next.js route**, and is the only
+  one left. It answers "which of *your* files break", which means reading the
+  caller's working tree; a hosted backend cannot. It researches through Convex
+  and correlates locally.
+- **The relay runs on Convex**, with the Next.js paths forwarding to it. Every
+  published CLI has `https://rift-cli.vercel.app` compiled in as its default
+  relay origin, so those paths have to keep answering — but the keys they spend
+  and the spend guard that bounds them now live in one place, and that guard is
+  finally one counter rather than one per warm serverless instance.
 
 ## CLI
 
@@ -73,6 +117,12 @@ bun run cli -- <command>          # or ./skills/upgrade-intelligence/scripts/rif
 Commands follow gen.md section 25: `package`, `migrate`, `error`, `repo`,
 `search`, `index`, `sources`, `report`, `stats`. Every command takes `--json`;
 `--fail-on <level>` exits `2` when risk reaches a threshold, for CI gating.
+
+The CLI stays local-first: it calls the engine directly against the index in
+`~/.upgrade-intel`, so it works with no deployment, and the relay lends it keys
+rather than taking its data. It does not read the hosted index — pointing it at
+a deployment would mean calling the functions above instead of the engine, which
+is not wired up.
 
 Agent integrations live in `skills/` — `upgrade-intelligence/SKILL.md` for Claude
 Code (section 17) and `generic/AGENT.md` for any other harness (section 18).
@@ -89,9 +139,14 @@ Code (section 17) and `generic/AGENT.md` for any other harness (section 18).
 | `VOYAGE_MODEL` | Embedding model. Defaults to `voyage-3.5-lite` (1024 dimensions) |
 | `VOYAGE_RPM` | Paces requests. Set to `3` on a key with no payment method on file |
 | `VOYAGE_BATCH_TOKENS` | Tokens per request. Defaults to 7000, under the free 10K/min cap |
-| `UPGRADE_INTEL_DATA_DIR` | Index and cache location. Defaults to `.upgrade-intel/` |
+| `UPGRADE_INTEL_DATA_DIR` | CLI only: index and cache location. Defaults to `.upgrade-intel/` |
+| `RIFT_RELAY_URL` | Relay origin, or `off` to guarantee nothing leaves for a third party |
+| `RIFT_RELAY_RATE_LIMIT` | Requests per caller per minute the relay will serve. Defaults to 30 |
 
-`GET /api/index` reports which of these are active.
+For the CLI these are read from the environment or `~/.upgrade-intel/.env`. For
+the deployment they belong to Convex — `bunx convex env set BRIGHTDATA_API_KEY …`
+— because the actions that read them run there, not on Vercel.
+`knowledge.stats` / `GET /api/index` reports which are active.
 
 ## Tests
 

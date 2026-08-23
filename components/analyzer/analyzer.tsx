@@ -1,7 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useAction, useMutation, useQuery } from "convex/react";
 
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { AnalyzerNav, type AnalyzerTab } from "@/components/analyzer/analyzer-nav";
 import { BlastMatrix } from "@/components/analyzer/blast-matrix";
 import { CitationDrawer } from "@/components/analyzer/citation-drawer";
@@ -10,12 +13,12 @@ import { ReportExporter } from "@/components/analyzer/report-exporter";
 import { ResearchTrace } from "@/components/analyzer/research-trace";
 import { Reveal } from "@/components/ui/reveal";
 import { PRESET_MANIFESTS } from "@/lib/presets";
-import { type DependencyRiskReport, type FullBlastRadiusAnalysis } from "@/lib/types";
+import { type DependencyRiskReport } from "@/lib/types";
 
 export function Analyzer() {
   const [activeTab, setActiveTab] = React.useState<AnalyzerTab>("analysis");
-  const [analysis, setAnalysis] = React.useState<FullBlastRadiusAnalysis | null>(null);
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [analysisId, setAnalysisId] = React.useState<Id<"analyses"> | null>(null);
+  const [isStarting, setIsStarting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [citation, setCitation] = React.useState<DependencyRiskReport | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -42,38 +45,50 @@ export function Analyzer() {
     [],
   );
 
+  const parseManifest = useAction(api.manifests.parse);
+  const startAnalysis = useMutation(api.analyses.start);
+
+  // Two subscriptions rather than a poll: `progress` moves as each package is
+  // claimed and finished, and `analysis` is the report, which is rebuilt from
+  // whatever has landed. Neither is a request the browser has to hold open —
+  // research outlives an HTTP connection, which is why this used to be a
+  // five-minute fetch that returned everything or nothing.
+  const progress = useQuery(api.analyses.get, analysisId ? { analysisId } : "skip");
+  const analysis = useQuery(api.analyses.blastRadius, analysisId ? { analysisId } : "skip") ?? null;
+
+  const isResearching =
+    progress != null && progress.status !== "complete" && progress.status !== "failed";
+  const isLoading = isStarting || isResearching;
+
   // Stable identity so the mount effect below can depend on it honestly
   // rather than suppressing the dependency check.
-  const run = React.useCallback(async (content: string, fileName: string) => {
-    setIsLoading(true);
-    setError(null);
+  const run = React.useCallback(
+    async (content: string, fileName: string) => {
+      setIsStarting(true);
+      setError(null);
+      setAnalysisId(null);
 
-    try {
-      const parsed = await fetch("/api/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, fileName }),
-      });
-      const parseData = await parsed.json();
+      try {
+        // Parsing resolves target versions against the registries, so it is an
+        // action; the analysis it starts is scheduled work we then watch.
+        const parsed = await parseManifest({ content, fileName });
 
-      if (!parsed.ok || !parseData.dependencies) throw new Error(parseData.error);
-
-      const analyzed = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dependencies: parseData.dependencies }),
-      });
-      const analyzeData = await analyzed.json();
-
-      if (!analyzed.ok || !analyzeData.analysis) throw new Error(analyzeData.error);
-
-      setAnalysis(analyzeData.analysis);
-    } catch (thrown) {
-      setError(thrown instanceof Error ? thrown.message : "Research failed.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+        setAnalysisId(
+          await startAnalysis({
+            ecosystem: parsed.ecosystem,
+            fileName: parsed.fileName,
+            packages: parsed.packages,
+            warnings: parsed.warnings,
+          }),
+        );
+      } catch (thrown) {
+        setError(thrown instanceof Error ? thrown.message : "Research failed.");
+      } finally {
+        setIsStarting(false);
+      }
+    },
+    [parseManifest, startAnalysis],
+  );
 
   // Load the first preset once, so the dashboard has something to show.
   // Deferred by a tick because `run` sets loading state synchronously, which is
@@ -112,15 +127,23 @@ export function Analyzer() {
 
             <ManifestInput onAnalyze={run} isLoading={isLoading} />
 
+            {!error && progress?.error ? (
+              <p className="border border-critical/40 bg-panel px-5 py-4 text-[13.5px] text-critical">
+                {progress.error}
+              </p>
+            ) : null}
+
             {error ? (
               <p className="border border-critical/40 bg-panel px-5 py-4 text-[13.5px] text-critical">
                 {error}
               </p>
             ) : null}
 
-            {isLoading ? <Researching /> : null}
+            {isLoading ? <Researching progress={progress ?? null} /> : null}
 
-            {!isLoading && analysis ? (
+            {/* Rendered while research is still running: every package that
+                lands is a row that can be read now. */}
+            {analysis && analysis.reports.length > 0 ? (
               <BlastMatrix analysis={analysis} onOpenCitation={openCitation} />
             ) : null}
           </div>
@@ -136,53 +159,77 @@ export function Analyzer() {
   );
 }
 
-/** The wait is long enough that it needs to say what it is doing. */
-function Researching() {
-  const STAGES = [
-    "Resolving target versions against the registry",
-    "Planning sources by authority",
-    "Reading release notes and migration guides",
-    "Extracting quote-anchored claims",
-  ];
-
-  const [stage, setStage] = React.useState(0);
-
-  React.useEffect(() => {
-    const timer = setInterval(
-      () => setStage((prev) => Math.min(prev + 1, STAGES.length - 1)),
-      2600,
-    );
-
-    return () => clearInterval(timer);
-  }, [STAGES.length]);
+/**
+ * The wait is long enough that it needs to say what it is doing.
+ *
+ * It used to say it on a timer — four stages, 2.6 seconds each, unrelated to
+ * anything actually happening. The backend now reports per-package status, so
+ * this reads it instead of miming it.
+ */
+function Researching({ progress }: { progress: AnalysisProgress | null }) {
+  const packages = progress?.packages ?? [];
+  const done = progress?.completed ?? 0;
+  const total = progress?.requested ?? 0;
 
   return (
     <div className="border border-border bg-panel px-6 py-10">
       <div className="flex items-center gap-3">
         <Spinner className="text-muted-foreground" />
-        <p className="text-[15px] font-medium tracking-tight">Researching dependencies…</p>
+        <p className="text-[15px] font-medium tracking-tight">
+          {total > 0 ? `Researching ${total} dependencies — ${done} done` : "Reading the manifest…"}
+        </p>
       </div>
 
-      <ol className="mt-6 space-y-2.5">
-        {STAGES.map((label, i) => (
-          <li
-            key={label}
-            className="flex items-center gap-3 font-mono text-[11.5px] transition-colors duration-500"
-          >
-            <span
-              aria-hidden
-              className={
-                i < stage
-                  ? "size-1.5 bg-mark"
-                  : i === stage
-                    ? "size-1.5 bg-foreground"
-                    : "size-1.5 bg-foreground/25"
-              }
-            />
-            <span className={i <= stage ? "text-muted-foreground" : "text-foreground/35"}>{label}</span>
-          </li>
-        ))}
-      </ol>
+      <p className="mt-3 max-w-xl text-[13px] leading-[1.6] text-muted-foreground">
+        Target versions come from the registry, then sources are read in order of authority.
+        Hosts that block automated requests are retrieved through the{" "}
+        <a
+          href="https://brightdata.com/products/web-unlocker"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="link-underline text-foreground"
+        >
+          Bright Data
+        </a>{" "}
+        unlocker, so a 403 is not the end of the trail.
+      </p>
+
+      {packages.length > 0 ? (
+        <ol className="mt-6 grid gap-2 sm:grid-cols-2">
+          {packages.map((entry) => (
+            <li key={entry.package} className="flex items-center gap-3 font-mono text-[11.5px]">
+              <span
+                aria-hidden
+                className={
+                  entry.status === "done"
+                    ? "size-1.5 bg-mark"
+                    : entry.status === "failed"
+                      ? "size-1.5 bg-critical"
+                      : entry.status === "researching"
+                        ? "size-1.5 animate-pulse bg-foreground"
+                        : "size-1.5 bg-foreground/25"
+                }
+              />
+              <span
+                className={
+                  entry.status === "pending" ? "text-foreground/35" : "text-muted-foreground"
+                }
+              >
+                {entry.package}
+              </span>
+              {entry.status === "done" ? (
+                <span className="text-foreground/35">
+                  {entry.knowledgeCount} claim{entry.knowledgeCount === 1 ? "" : "s"}
+                  {entry.servedFromIndex ? " · indexed" : ""}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
     </div>
   );
 }
+
+/** Exactly what `analyses.get` returns, minus the null. */
+type AnalysisProgress = NonNullable<(typeof api.analyses.get)["_returnType"]>;

@@ -15,13 +15,13 @@ export function Surfaces() {
           index="06"
           title={
             <>
-              One engine. <Accent>Three ways</Accent> to reach it.
+              One engine. <Accent>Six ways</Accent> to reach it.
             </>
           }
-          description="The dashboard is the demo. The real consumers are a terminal, a CI job, and a coding agent that has to decide what to change and then say whether it worked."
+          description="The website is the demo. The real consumers are a terminal, a CI job, and a coding agent that has to decide what to change and then say whether it worked. All six call the same functions — nothing keeps its own copy of the logic, so an answer cannot be right in one place and wrong in another."
         />
 
-        <div className="mt-14 grid border-l border-t md:grid-cols-3">
+        <div className="mt-14 grid border-l border-t sm:grid-cols-2 lg:grid-cols-3">
           {SURFACES.map((surface, i) => (
             <Reveal key={surface.name} delay={i * 70} className="border-b border-r">
               <div className="cell group flex h-full flex-col p-7">

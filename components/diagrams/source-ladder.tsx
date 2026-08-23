@@ -18,8 +18,13 @@ export function SourceLadder() {
     <div ref={ref} className="border bg-panel">
       <div className="flex items-center justify-between border-b border-border bg-paper/60 px-5 py-3">
         <span className="font-mono text-[11.5px] text-foreground">source ladder</span>
-        <span className="label text-foreground/35">
-          read in this order
+        <span className="label flex items-center gap-1.5 text-foreground/35">
+          <span>read in this order</span>
+          <span aria-hidden>·</span>
+          <span className="inline-flex items-center gap-1.5">
+            <i aria-hidden className="size-1.5 bg-mark" />
+            unlocked by bright data
+          </span>
         </span>
       </div>
 

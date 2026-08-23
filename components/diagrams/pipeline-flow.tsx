@@ -15,7 +15,7 @@ const ROW_Y = [36, 176] as const;
 /** Left-to-right on the top row, right-to-left on the bottom — one snake. */
 const COL_X = [10, 248, 486, 724] as const;
 
-type Placed = { x: number; y: number; label: string; detail: string };
+type Placed = { x: number; y: number; label: string; detail: string; note?: string };
 
 const NODES: Placed[] = PIPELINE_STAGES.map((stage, i) => {
   const top = i < 4;
@@ -61,18 +61,57 @@ const head = ({ x, y, dir }: (typeof HEADS)[number]) => {
 
 const FEEDBACK = `M ${RETURN_X} ${ROW_Y[1] + NODE_H} V ${RETURN_Y} H ${TURN_X} V ${ROW_Y[1] + NODE_H}`;
 
+/**
+ * The whole snake as one path, INPUT to OUTPUT.
+ *
+ * The edges are drawn as seven separate segments because each one animates in
+ * on its own delay. A current has to cross the node boxes as well as the gaps
+ * between them, so it needs the continuous version — same geometry, one stroke.
+ */
+const FLOW = [
+  `M ${COL_X[0] + NODE_W / 2} ${MID_TOP}`,
+  `H ${TURN_X}`,
+  `V ${MID_BOTTOM}`,
+  `H ${RETURN_X}`,
+].join(" ");
+
+/** One pass, and the pause before the first, in milliseconds. */
+const FLOW_MS = 9000;
+const FLOW_START_MS = 1100;
+
+const SEG_A = TURN_X - RETURN_X;
+const SEG_B = MID_BOTTOM - MID_TOP;
+const FLOW_LENGTH = SEG_A + SEG_B + SEG_A;
+
+/**
+ * Where along the flow the packet enters a given stage.
+ *
+ * Derived from the geometry rather than typed out, so moving a column moves the
+ * lighting with it. The turn is the awkward one: the packet enters INDEX going
+ * down the right-hand side, not along the bottom row.
+ */
+function entryDistance(node: Placed): number {
+  if (node.y === ROW_Y[0]) return Math.max(0, node.x - RETURN_X);
+  if (node.x <= TURN_X && TURN_X <= node.x + NODE_W) return SEG_A + (ROW_Y[1] - MID_TOP);
+
+  return SEG_A + SEG_B + (TURN_X - (node.x + NODE_W));
+}
+
 export function PipelineFlow() {
   const { ref, inView } = useInView<HTMLDivElement>({ threshold: 0.25 });
   const svgRef = React.useRef<SVGSVGElement | null>(null);
 
   // Dash length has to match the real path, so it is measured rather than guessed.
+  // Re-measured when the current appears: it only mounts once the diagram is on
+  // screen, so a mount-only effect would leave it on the fallback length and
+  // show two lit segments instead of one.
   React.useEffect(() => {
-    const paths = svgRef.current?.querySelectorAll<SVGPathElement>("path.draw");
+    const paths = svgRef.current?.querySelectorAll<SVGPathElement>("path.draw, path.flow-current");
 
     paths?.forEach((path) => {
       path.style.setProperty("--len", String(path.getTotalLength()));
     });
-  }, []);
+  }, [inView]);
 
   return (
     <div ref={ref}>
@@ -82,6 +121,7 @@ export function PipelineFlow() {
         role="img"
         aria-label="Pipeline: input, research, normalize, knowledge, index, retrieval, evidence, output, with verified fixes written back to the index."
         className="w-full"
+        style={{ "--flow-duration": `${FLOW_MS}ms` } as React.CSSProperties}
       >
         {EDGES.map((d, i) => (
           <path
@@ -93,6 +133,32 @@ export function PipelineFlow() {
             style={{ "--draw-delay": `${180 + i * 90}ms` } as React.CSSProperties}
           />
         ))}
+
+        {/* The current, behind the boxes: it lights the gaps between stages and
+            is hidden where a stage sits, which is the shape of the pipeline. */}
+        {inView ? (
+          <>
+            <path
+              d={FLOW}
+              className="flow-current fill-none stroke-mark/70"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              style={{ animationDelay: `${FLOW_START_MS}ms` } as React.CSSProperties}
+            />
+            {/* Behind the boxes on purpose: a dot drawn over a card covers the
+                text and reads as a blemish rather than as movement. */}
+            <circle
+              r="3"
+              className="flow-packet fill-mark"
+              style={
+                {
+                  "--flow-path": `path('${FLOW}')`,
+                  animationDelay: `${FLOW_START_MS}ms`,
+                } as React.CSSProperties
+              }
+            />
+          </>
+        ) : null}
 
         <g
           className="reveal fill-none stroke-foreground/25"
@@ -143,6 +209,24 @@ export function PipelineFlow() {
               className="fill-panel stroke-foreground/25"
               strokeWidth="1"
             />
+
+            {/* The stage the packet is currently inside. */}
+            {inView ? (
+              <rect
+                x={node.x}
+                y={node.y}
+                width={NODE_W}
+                height={NODE_H}
+                rx="2"
+                className="stage-lit fill-mark/[0.07] stroke-mark/60"
+                strokeWidth="1"
+                style={
+                  {
+                    animationDelay: `${FLOW_START_MS + (entryDistance(node) / FLOW_LENGTH) * FLOW_MS}ms`,
+                  } as React.CSSProperties
+                }
+              />
+            ) : null}
             <text
               x={node.x + 16}
               y={node.y + 27}
@@ -157,6 +241,27 @@ export function PipelineFlow() {
             >
               {node.detail}
             </text>
+
+            {node.note ? (
+              <g>
+                <rect
+                  x={node.x + 16}
+                  y={node.y + NODE_H + 10}
+                  width={node.note.length * 6.2 + 16}
+                  height={17}
+                  rx="2"
+                  className="fill-mark/10 stroke-mark/45"
+                  strokeWidth="1"
+                />
+                <text
+                  x={node.x + 24}
+                  y={node.y + NODE_H + 22}
+                  className="fill-mark font-mono text-[9.5px] tracking-[0.1em] uppercase"
+                >
+                  {node.note}
+                </text>
+              </g>
+            ) : null}
           </g>
         ))}
       </svg>

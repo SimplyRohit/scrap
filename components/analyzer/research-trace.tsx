@@ -34,8 +34,9 @@ export function ResearchTrace({ analysis }: { analysis: FullBlastRadiusAnalysis 
           <p className="mt-2 max-w-xl text-[13.5px] leading-[1.65] text-muted-foreground">
             Candidates are ranked by authority — migration guides and changelogs before
             release notes, registries before community posts — and read in that order until
-            the document budget is spent. Hosts that block automated requests go through the
-            unlocker; a fresh cached copy is reused rather than re-fetched.
+            the document budget is spent. Hosts that block automated requests go through
+            Bright Data&rsquo;s Web Unlocker; a fresh cached copy is reused rather than
+            re-fetched.
           </p>
         </Reveal>
 
@@ -43,7 +44,7 @@ export function ResearchTrace({ analysis }: { analysis: FullBlastRadiusAnalysis 
           <dl className="grid grid-cols-3 border-t border-border">
             {[
               { label: "Read", value: researchSummary.totalSourcesFetched },
-              { label: "Unlocker", value: researchSummary.unlockedSourceCount },
+              { label: "Bright Data", value: researchSummary.unlockedSourceCount },
               { label: "Cached", value: researchSummary.cacheHits },
             ].map((stat, i) => (
               <div
