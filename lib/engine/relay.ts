@@ -60,6 +60,48 @@ export class RelayError extends Error {
 }
 
 /**
+ * Endpoints this relay has already refused to serve.
+ *
+ * A deployment can hold some credentials and not others — the common case is a
+ * SERP zone with no unlocker, because documentation sites do not block plain
+ * requests and an unlocker zone is the expensive one to keep. Without this, a
+ * single research run asked a relay that has no unlocker eighteen separate
+ * times and fell back to a direct fetch eighteen times, paying a full round
+ * trip for each refusal.
+ *
+ * Keyed by endpoint rather than globally: a relay with no unlocker still has a
+ * working SERP zone, and giving up on all of it because one leg is unavailable
+ * would throw away the half that raises confidence.
+ *
+ * Process-lifetime, and deliberately not persisted. A long-running `rift mcp`
+ * would otherwise keep refusing an endpoint that came back hours ago.
+ */
+const unavailable = new Set<string>();
+
+/** Whether this relay is known to be unable to serve an endpoint. */
+export function relayUnavailable(path: string): boolean {
+  return unavailable.has(path);
+}
+
+/** Test seam: the set outlives a single test otherwise. */
+export function resetRelayAvailability(): void {
+  unavailable.clear();
+}
+
+/**
+ * Statuses that mean "this relay will not serve this endpoint", as opposed to
+ * "not right now".
+ *
+ * 503 is the deployment saying it holds no credential for this leg. 502 is an
+ * upstream refusal, which in practice is a missing or disabled zone — the
+ * vendor reports that per request, so retrying it every time costs a round trip
+ * and never succeeds. A 429 is explicitly excluded: that one does clear.
+ */
+function isPermanent(status: number | undefined): boolean {
+  return status === 503 || status === 502;
+}
+
+/**
  * POSTs to a relay endpoint and returns the parsed body.
  *
  * Throws rather than returning null: each caller has a different fallback — the
@@ -70,6 +112,7 @@ export class RelayError extends Error {
 export async function relayPost<T>(path: string, payload: unknown, timeoutMs = RELAY_TIMEOUT_MS): Promise<T> {
   const origin = relayOrigin();
   if (!origin) throw new RelayError('No relay configured');
+  if (unavailable.has(path)) throw new RelayError(`Relay ${path} is unavailable on this deployment`);
 
   const response = await fetch(`${origin}${path}`, {
     method: 'POST',
@@ -79,6 +122,7 @@ export async function relayPost<T>(path: string, payload: unknown, timeoutMs = R
   });
 
   if (!response.ok) {
+    if (isPermanent(response.status)) unavailable.add(path);
     const detail = await response.text().catch(() => '');
     throw new RelayError(`Relay ${path} failed (${response.status}): ${detail.slice(0, 200)}`, response.status);
   }

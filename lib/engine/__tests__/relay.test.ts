@@ -10,7 +10,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { relayConfigured, relayOrigin } from '../relay';
+import { relayConfigured, relayOrigin, resetRelayAvailability } from '../relay';
 import { checkRelayTarget } from '../relayTarget';
 import { checkRateLimit, resetRateLimits, callerKey } from '../relayGuard';
 import { fetchDocument } from '../research/fetcher';
@@ -38,6 +38,7 @@ beforeEach(async () => {
   process.env.UPGRADE_INTEL_DATA_DIR = directory;
 
   resetRateLimits();
+  resetRelayAvailability();
 });
 
 afterEach(async () => {
@@ -154,6 +155,58 @@ describe('fetching through the relay', () => {
     expect(result.body).toBe('<h1>direct worked</h1>');
     expect(result.transport).toBe('direct');
     expect(seen).toContain('https://docs.example.com/changelog');
+  });
+
+  /**
+   * A deployment with a SERP zone and no unlocker is the expected shape, not an
+   * edge case: documentation sites do not block plain requests, so the unlocker
+   * is the one product there is no reason to pay for. Before this, a single
+   * research run asked such a relay eighteen times and fell back eighteen
+   * times, paying a round trip for each refusal.
+   */
+  test('a relay with no unlocker is asked once, then skipped', async () => {
+    process.env.RIFT_RELAY_URL = 'https://rift.example.com';
+
+    const seen = stubFetch((url) => {
+      if (url === 'https://rift.example.com/api/relay/fetch') {
+        return new Response(JSON.stringify({ error: 'no relay credentials' }), { status: 503 });
+      }
+      return new Response('<h1>direct</h1>', { status: 200 });
+    });
+
+    for (const page of ['one', 'two', 'three']) {
+      const result = await fetchDocument(`https://docs.example.com/${page}`, {
+        sourceType: 'official_changelog',
+        retryDelayMs: 0,
+      });
+      expect(result.transport).toBe('direct');
+    }
+
+    const relayCalls = seen.filter((url) => url.endsWith('/api/relay/fetch'));
+    expect(relayCalls).toHaveLength(1);
+  });
+
+  /**
+   * Legs are tracked separately. The SERP zone is the half that raises
+   * confidence, and a missing unlocker must not take it down too.
+   */
+  test('a missing unlocker does not disable relay search', async () => {
+    process.env.RIFT_RELAY_URL = 'https://rift.example.com';
+
+    stubFetch((url) => {
+      if (url.endsWith('/api/relay/fetch')) return new Response('{}', { status: 503 });
+      if (url.endsWith('/api/relay/search')) {
+        return new Response(JSON.stringify({ results: [{ url: 'https://nextjs.org/docs/upgrading', title: 'Guide' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('<h1>direct</h1>', { status: 200 });
+    });
+
+    await fetchDocument('https://docs.example.com/changelog', { sourceType: 'official_changelog', retryDelayMs: 0 });
+
+    expect(await searchWeb('next migration guide')).toHaveLength(1);
   });
 
   test('an explicit transport is honoured and never escalates to the relay', async () => {

@@ -9,10 +9,11 @@
 
 import { hashBody, isFresh, readCache, revalidationHeaders, writeCache, type CacheEntry } from './cache';
 import type { SourceType } from '../knowledge';
-import { relayConfigured, relayPost } from '../relay';
+import { relayConfigured, relayPost, relayUnavailable } from '../relay';
 
 const BRIGHTDATA_ENDPOINT = 'https://api.brightdata.com/request';
 const DEFAULT_ZONE = 'web_unlocker1';
+const RELAY_FETCH_PATH = '/api/relay/fetch';
 
 /** Hosts that serve clean JSON and never need an unlocker. */
 const DIRECT_HOSTS = new Set([
@@ -66,7 +67,11 @@ type Route = 'direct' | 'brightdata' | 'relay';
 function chooseTransport(url: string, requested: Transport): Route {
   if (requested !== 'auto') return requested;
 
-  const unlocker: Route | null = brightDataConfigured() ? 'brightdata' : relayConfigured() ? 'relay' : null;
+  // A relay that has already answered "no unlocker here" is not an unlocker.
+  // Choosing it anyway would report the fetch as a failed relay attempt when
+  // what actually happened is an ordinary direct fetch.
+  const relayUsable = relayConfigured() && !relayUnavailable(RELAY_FETCH_PATH);
+  const unlocker: Route | null = brightDataConfigured() ? 'brightdata' : relayUsable ? 'relay' : null;
   if (!unlocker) return 'direct';
 
   try {
@@ -138,7 +143,7 @@ async function fetchViaRelay(
   url: string,
   timeoutMs: number,
 ): Promise<{ status: number; body: string; headers: Headers }> {
-  const result = await relayPost<RelayFetchResponse>('/api/relay/fetch', { url }, timeoutMs);
+  const result = await relayPost<RelayFetchResponse>(RELAY_FETCH_PATH, { url }, timeoutMs);
 
   const headers = new Headers();
   if (result.contentType) headers.set('content-type', result.contentType);
