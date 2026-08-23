@@ -237,12 +237,13 @@ export const SURFACES = [
     name: "CLI",
     status: "Shipping",
     summary:
-      "Fourteen commands, every one of them with --json, because the first consumer of this output is a coding agent and the second is CI.",
+      "Fifteen commands, every one of them with --json, because the first consumer of this output is a coding agent and the second is CI.",
     points: [
       "package · migrate · error · repo",
       "search · index · graph · sources",
       "backfill · prune · reindex · report",
-      "mcp · stats · --fail-on gates the build",
+      "mcp · stats · install-skill",
+      "--fail-on gates the build",
     ],
     code: "npx riftcli repo . --fail-on HIGH",
   },
@@ -251,7 +252,7 @@ export const SURFACES = [
     name: "HTTP API",
     status: "Shipping",
     summary:
-      "Eleven routes over the same engine. /api/search only ever answers from the index; research is a separate, explicit call.",
+      "Eleven routes over the same engine, plus three that lend the deployment's API keys to a CLI that has none. /api/search only ever answers from the index; research is a separate, explicit call.",
     points: ["/api/parse · /api/analyze", "/api/errors/analyze", "/api/agent/resolve · report"],
     code: "POST /api/analyze  { dependencies }",
   },

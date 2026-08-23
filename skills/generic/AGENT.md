@@ -6,25 +6,38 @@ Two integration surfaces, same engine behind both.
 ## Setup
 
 ```bash
-npm i -g riftcli             # puts `rift` on PATH
-rift stats                   # every capability should read `on`
+npm i -g riftcli             # puts `rift` on PATH; needs Node 20+
+rift stats                   # verify
 ```
 
-Credentials go in `~/.upgrade-intel/.env`, not a project `.env.local`. A globally
-installed `rift` runs from whatever directory you happen to be in, so a
-per-project env file is the wrong place to put them. Real environment variables
-win over that file.
+No keys are required. Each capability reads `on` (a local key), `relay`
+(borrowed from the deployed site), or `off`.
+
+**`relay` is working.** The vendor calls are made by the deployment; the fetch
+cache, the extraction, and the index stay on this machine, so nothing about the
+repository under analysis is sent anywhere. `off` costs coverage, never
+correctness: without `brightDataSerp` migration guides are only found at
+predictable URLs, and without `embeddings` retrieval is keyword-only.
+
+To spend your own quota instead, put keys in `~/.upgrade-intel/.env` — not a
+project `.env.local`, because a globally installed `rift` runs from whatever
+directory you happen to be in. A local key always wins over the relay, and real
+environment variables win over the file.
 
 ```
 BRIGHTDATA_API_KEY=...
+BRIGHTDATA_ZONE=...          # Web Unlocker zone; optional, docs rarely block
 BRIGHTDATA_SERP_ZONE=...     # SERP zone name from the Bright Data dashboard
 GITHUB_TOKEN=...             # no scopes needed; public reads only
 VOYAGE_API_KEY=...           # semantic search; lexical-only without it
+RIFT_RELAY_URL=off           # never contact the deployment at all
 ```
 
 The index lives in `~/.upgrade-intel/` and is shared by every repository — what
 is indexed is knowledge about *packages*, not about one project. A project
 overrides this with its own `.upgrade-intel/` directory or `UPGRADE_INTEL_DATA_DIR`.
+It starts empty, so the first command on a package is slow; that is once per
+package, not a fault.
 
 ## CLI
 
@@ -43,11 +56,14 @@ Diagnostics go to stderr. Exit codes:
 
 ## HTTP
 
-Run `bun run dev`, then:
+Against the deployment at `https://rift-cli.vercel.app`, or a local
+`bun run dev` on `http://localhost:3000`:
 
 | Endpoint | Purpose |
 | --- | --- |
 | `POST /api/research` | Research one package upgrade |
+| `POST /api/analyze` | Risk for a whole `dependencies` map |
+| `POST /api/parse` | Parse a manifest into dependencies |
 | `POST /api/errors/analyze` | Diagnose an error |
 | `POST /api/repositories/analyze` | Manifest + correlation for a repository |
 | `POST /api/search` | Query the index; never scrapes |
@@ -56,6 +72,14 @@ Run `bun run dev`, then:
 | `GET /api/index` | Index statistics and capabilities |
 | `POST /api/index` | Index a package, or `{"action":"backfill"}` to embed knowledge |
 | `GET /api/graph` | Package knowledge graph; `?format=tree` for a readable diagram |
+
+The deployment keeps no index — its filesystem resets between requests — so
+every call there researches from scratch. Prefer the CLI for repeated work: it
+keeps a warm index on the machine that is asking.
+
+Three further routes exist only to lend the deployment's credentials to a CLI
+that has none: `POST /api/relay/fetch`, `/api/relay/search`, `/api/relay/embed`.
+Call them through `rift`, not directly.
 
 ## The loop
 
@@ -150,5 +174,5 @@ rather than a non-zero exit code to parse. Tools:
 | `report_fix` | Record an outcome so the index learns |
 
 This is a transport, not a capability. Every tool calls the same engine function
-the matching CLI command calls, and the same obligations below apply through it.
+the matching CLI command calls, and the obligations above apply through it.
 `stdout` belongs to the protocol while the server runs; diagnostics go to stderr.

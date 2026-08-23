@@ -6,7 +6,9 @@ export const SITE = {
     "Rift researches every dependency against its own changelogs, release notes, and migration guides, extracts the breaking changes, and returns each one with the verbatim sentence it was found in.",
   shortDescription:
     "See what a dependency upgrade breaks before you run it. Every finding carries the sentence it came from.",
-  url: "https://rift.vercel.app",
+  // Not `rift.vercel.app` — that name belongs to a home goods shop. Every
+  // canonical link, sitemap entry, and OG tag pointed at their storefront.
+  url: "https://rift-cli.vercel.app",
   repo: "https://github.com/SimplyRohit/scrap",
   twitter: "@riftdev",
   // The npm package is `riftcli`, not `rift` — that name belongs to someone else's
