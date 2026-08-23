@@ -10,6 +10,7 @@
 
 import { readFileSync } from 'node:fs';
 
+import { configureEmbeddingsFromRelay } from './index/relayEmbedder';
 import { configureEmbeddingsFromEnv } from './index/voyage';
 import { homeEnvFile } from './paths';
 
@@ -50,12 +51,20 @@ function loadHomeEnv(): void {
   }
 }
 
-/** Idempotent. Returns whether semantic retrieval is available. */
+/**
+ * Idempotent. Returns whether semantic retrieval is available.
+ *
+ * A local key is tried first and the relay only fills the gap, so a caller who
+ * pays for Voyage keeps their own quota, their own model choice, and their own
+ * vectors. Switching between the two changes the embedder id, which the store
+ * treats as a different coordinate space — that is correct, and it is why the
+ * order here is fixed rather than whichever answers first.
+ */
 export function initializeEngine(): boolean {
   if (!initialized) {
     initialized = true;
     loadHomeEnv();
-    semantic = configureEmbeddingsFromEnv();
+    semantic = configureEmbeddingsFromEnv() || configureEmbeddingsFromRelay();
   }
   return semantic;
 }

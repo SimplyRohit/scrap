@@ -52,6 +52,8 @@ import {
   renderRepositoryImpactDocument,
 } from '../lib/engine/output/markdown';
 import { researchManifest, researchPackageUpgrade, type PackageResearchResult } from '../lib/engine/pipeline';
+import { relayConfigured, relayOrigin } from '../lib/engine/relay';
+import { voyageConfigured } from '../lib/engine/index/voyage';
 import { brightDataConfigured } from '../lib/engine/research/fetcher';
 import { tryFetchPackageMetadata } from '../lib/engine/research/registry';
 import { resolveSourcePlan } from '../lib/engine/research/sources';
@@ -519,17 +521,34 @@ async function commandReport(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+/**
+ * A capability is not a boolean any more.
+ *
+ * `relay` means the work happens, paid for by the deployed site rather than a
+ * local key. Reporting that as `on` would hide a real dependency on someone
+ * else's uptime and quota; reporting it as `off` would be a lie about what the
+ * next command can do. GitHub has no relay — a token only raises a rate limit,
+ * which is not worth proxying — so it stays a plain on/off.
+ */
+type CapabilityState = 'on' | 'relay' | 'off';
+
+function capabilityState(local: boolean, relayed: boolean): CapabilityState {
+  if (local) return 'on';
+  return relayed ? 'relay' : 'off';
+}
+
 async function commandStats(args: ParsedArgs): Promise<number> {
   const stats = await getStore().stats();
-  const capabilities = {
-    brightData: brightDataConfigured(),
-    brightDataSerp: serpConfigured(),
-    github: Boolean(process.env.GITHUB_TOKEN),
-    embeddings: initializeEngine(),
+  const relay = relayConfigured();
+  const capabilities: Record<string, CapabilityState> = {
+    brightData: capabilityState(brightDataConfigured(), relay),
+    brightDataSerp: capabilityState(serpConfigured(), relay),
+    github: capabilityState(Boolean(process.env.GITHUB_TOKEN), false),
+    embeddings: capabilityState(voyageConfigured(), relay && initializeEngine()),
   };
 
   if (boolFlag(args.flags, 'json')) {
-    emitJson({ ...stats, capabilities });
+    emitJson({ ...stats, capabilities, relay: relayOrigin() ?? null });
     return 0;
   }
 
@@ -547,11 +566,18 @@ async function commandStats(args: ParsedArgs): Promise<number> {
 
   process.stdout.write(heading('Capabilities'));
   process.stdout.write('\n');
-  for (const [name, active] of Object.entries(capabilities)) {
-    process.stdout.write(`  ${active ? green('on ') : dim('off')}  ${name}\n`);
+  for (const [name, state] of Object.entries(capabilities)) {
+    const label = state === 'on' ? green('on   ') : state === 'relay' ? green('relay') : dim('off  ');
+    process.stdout.write(`  ${label}  ${name}\n`);
   }
+
+  const relayOrigin_ = relayOrigin();
+  if (relayOrigin_ && Object.values(capabilities).includes('relay')) {
+    process.stdout.write(`  ${dim(`relayed through ${relayOrigin_} — set your own keys to use your quota`)}\n`);
+  }
+
   // Retrieval quality depends on this, so it is worth stating plainly.
-  if (!capabilities.embeddings) {
+  if (capabilities.embeddings === 'off') {
     process.stdout.write(`  ${dim('retrieval is lexical only — set VOYAGE_API_KEY for semantic search')}\n`);
   } else if (stats.withEmbeddings < stats.total) {
     process.stdout.write(
