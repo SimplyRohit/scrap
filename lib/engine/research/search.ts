@@ -8,7 +8,7 @@
 
 import * as cheerio from 'cheerio';
 
-import { tryFetchDocument } from './fetcher';
+import { brightDataError, tryFetchDocument } from './fetcher';
 import { classifySource } from './sources';
 import type { SourceType } from '../knowledge';
 import { relayConfigured, relayPost } from '../relay';
@@ -53,11 +53,43 @@ export async function searchWeb(query: string, limit = 10): Promise<SearchResult
     });
 
     if (!response.ok) return [];
+
+    const reported = brightDataError(response.headers);
+    if (reported) {
+      warnOnce(`SERP zone rejected the request — ${reported}`);
+      return [];
+    }
+
     const body = await response.text();
     return parseSerp(body, limit);
   } catch {
     return [];
   }
+}
+
+/**
+ * Reports a broken SERP configuration exactly once per process.
+ *
+ * Returning `[]` stays the contract — discovery is enrichment, and the
+ * deterministic sources must still produce a result without it. But an empty
+ * result from a misconfigured zone is indistinguishable from an empty result
+ * from a genuinely obscure query, and that ambiguity is what let a wrong zone
+ * name go unnoticed while every answer quietly rested on a single domain.
+ *
+ * Once, not per query: a research run issues several searches, and three
+ * identical warnings about one broken zone is noise that trains you to skip it.
+ */
+const warned = new Set<string>();
+
+function warnOnce(message: string): void {
+  if (warned.has(message)) return;
+  warned.add(message);
+  process.stderr.write(`warning  ${message}\n`);
+}
+
+/** Test seam: the set outlives a single test otherwise. */
+export function resetSearchWarnings(): void {
+  warned.clear();
 }
 
 /**

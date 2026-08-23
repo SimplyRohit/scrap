@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
 /**
@@ -37,7 +37,42 @@ export function dataRoot(): string {
   if (explicit) return explicit;
 
   const local = path.join(process.cwd(), '.upgrade-intel');
-  return existsSync(local) ? local : homeRoot();
+  if (existsSync(local)) return local;
+
+  return writableHomeRoot();
+}
+
+/**
+ * Cached answer to "can we actually write to the home root".
+ *
+ * A serverless function's home directory is read-only — only the temp directory
+ * is writable, and only for the life of one instance. Falling back keeps the
+ * cache working within an invocation instead of failing every write.
+ *
+ * Probed rather than sniffed for a platform name: `VERCEL` would cover one
+ * host and miss every other read-only environment, including a container run
+ * with a non-writable HOME.
+ */
+let resolvedRoot: string | null = null;
+
+function writableHomeRoot(): string {
+  if (resolvedRoot) return resolvedRoot;
+
+  const home = homeRoot();
+  try {
+    mkdirSync(home, { recursive: true });
+    resolvedRoot = home;
+  } catch {
+    // Namespaced under the temp directory so two users on one host do not share
+    // a cache, the way two users on one machine do not share a home.
+    resolvedRoot = path.join(tmpdir(), 'upgrade-intel');
+  }
+  return resolvedRoot;
+}
+
+/** Test seam: the probe is memoized for the life of the process. */
+export function resetDataRoot(): void {
+  resolvedRoot = null;
 }
 
 export function cacheDir(): string {

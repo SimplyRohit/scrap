@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import { configureEmbeddingsFromRelay } from './index/relayEmbedder';
 import { configureEmbeddingsFromEnv } from './index/voyage';
 import { homeEnvFile } from './paths';
+import { allowDefaultRelay } from './relay';
 
 let initialized = false;
 let semantic = false;
@@ -64,6 +65,8 @@ export function initializeEngine(): boolean {
   if (!initialized) {
     initialized = true;
     loadHomeEnv();
+    // After the env file, so a key it supplies still wins over the relay.
+    allowDefaultRelay();
     semantic = configureEmbeddingsFromEnv() || configureEmbeddingsFromRelay();
   }
   return semantic;

@@ -70,9 +70,22 @@ export async function readCache(url: string): Promise<CacheEntry | null> {
   }
 }
 
+/**
+ * Best-effort by design.
+ *
+ * A cache that cannot be written is a slower cache. It is not a failed fetch —
+ * the document is already in hand, and throwing here discards a page that was
+ * successfully downloaded. On a read-only filesystem that turned every source
+ * into a failure and every report into "No sources could be read", while the
+ * network requests themselves were all succeeding.
+ */
 export async function writeCache(entry: CacheEntry): Promise<void> {
-  await ensureDataDirs();
-  await writeFile(cachePath(entry.url), JSON.stringify(entry, null, 2), 'utf8');
+  try {
+    await ensureDataDirs();
+    await writeFile(cachePath(entry.url), JSON.stringify(entry, null, 2), 'utf8');
+  } catch {
+    // Nothing to recover: the caller already has the body.
+  }
 }
 
 export function isFresh(entry: CacheEntry, sourceType: SourceType, now = Date.now()): boolean {
