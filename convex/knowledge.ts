@@ -12,7 +12,7 @@ import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery, query } from './_generated/server';
 import * as Knowledge from './model/knowledge';
 import { brightDataConfigured, githubConfigured, serpConfigured } from '../lib/engine/capabilities';
-import { knowledgeObject, knowledgePatch, scoredKnowledge, searchQuery } from './validators';
+import { ecosystem, knowledgeObject, knowledgePatch, scoredKnowledge, searchQuery } from './validators';
 
 export const search = query({
   args: searchQuery,
@@ -81,9 +81,9 @@ export const findByFingerprint = internalQuery({
 });
 
 export const hasCoverage = internalQuery({
-  args: { package: v.string(), version: v.optional(v.string()) },
+  args: { package: v.string(), version: v.optional(v.string()), ecosystem: v.optional(ecosystem) },
   returns: v.boolean(),
-  handler: async (ctx, args) => Knowledge.hasCoverage(ctx, args.package, args.version),
+  handler: async (ctx, args) => Knowledge.hasCoverage(ctx, args.package, args.version, args.ecosystem),
 });
 
 export const upsertMany = internalMutation({

@@ -180,9 +180,13 @@ export class JsonKnowledgeStore implements KnowledgeStore {
     return run;
   }
 
-  async hasCoverage(packageName: string, version?: string): Promise<boolean> {
+  async hasCoverage(
+    packageName: string,
+    version?: string,
+    ecosystem?: KnowledgeObject['ecosystem'],
+  ): Promise<boolean> {
     const index = await this.load();
-    return index.knowledge.some((item) => coversVersion(item, packageName, version));
+    return index.knowledge.some((item) => coversVersion(item, packageName, version, ecosystem));
   }
 
   async search(query: SearchQuery): Promise<ScoredKnowledge[]> {

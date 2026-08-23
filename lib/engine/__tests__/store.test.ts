@@ -181,6 +181,39 @@ describe('coverage', () => {
     expect(await store.hasCoverage('demo', '1.0.0')).toBe(false);
     expect(await store.hasCoverage('other', '2.1.0')).toBe(false);
   });
+
+  /**
+   * `requests` is an HTTP library on npm and a different HTTP library on PyPI.
+   * `pydantic` is a Python package and an empty npm security placeholder. A name
+   * is not an identity, so coverage keyed on the name alone answered "yes, I
+   * know this" for a package it had never seen — and then served the other
+   * ecosystem's changelog as evidence for it. Being wrong here is worse than
+   * being empty: an empty answer is visibly nothing, and this looked like
+   * research.
+   */
+  test('does not mistake a same-named package in another ecosystem for coverage', async () => {
+    const store = await freshStore();
+    await store.upsert([knowledge({ package: 'requests', ecosystem: 'python', affected: '>=2.0.0' })]);
+
+    expect(await store.hasCoverage('requests', '2.1.0', 'python')).toBe(true);
+    expect(await store.hasCoverage('requests', '2.1.0', 'nodejs')).toBe(false);
+
+    // An unspecified ecosystem still matches anything: the CLI's own `search`
+    // asks about a name the user typed, with no manifest to say which registry
+    // it came from.
+    expect(await store.hasCoverage('requests', '2.1.0')).toBe(true);
+  });
+
+  test('search does not return another ecosystem\'s findings', async () => {
+    const store = await freshStore();
+    await store.upsert([knowledge({ package: 'requests', ecosystem: 'python', affected: '>=2.0.0' })]);
+
+    const wrong = await store.search({ package: 'requests', version: '2.1.0', ecosystem: 'nodejs' });
+    expect(wrong).toHaveLength(0);
+
+    const right = await store.search({ package: 'requests', version: '2.1.0', ecosystem: 'python' });
+    expect(right).toHaveLength(1);
+  });
 });
 
 describe('deduplication', () => {
