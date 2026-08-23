@@ -6,6 +6,7 @@ import path from 'node:path';
 import { recordFixOutcome, type FixReport } from '../feedback';
 import { JsonKnowledgeStore } from '../index/store';
 import { SOURCE_TRUST, type KnowledgeObject } from '../knowledge';
+import { satisfies } from '../semver';
 
 const temporaries: string[] = [];
 
@@ -161,5 +162,43 @@ describe('confidence ceiling', () => {
     const result = await recordFixOutcome(report({ store, derivedFrom: [] }));
 
     expect(result.recorded!.confidence).toBeLessThan(0.75);
+  });
+});
+
+describe('the version a fix applies from', () => {
+  test('inherits the cause, not the version the reporter happened to run', async () => {
+    const store = await freshStore();
+    await store.upsert([officialKnowledge()]); // breaking change introduced in 2.0.0
+
+    const result = await recordFixOutcome(report({ store, version: '2.6.2' }));
+
+    // Reported from 2.6.2, but the break it cures starts at 2.0.0. Anchoring to
+    // the reporter's version hid the fix from everyone in between — which is
+    // everyone still stuck on the break.
+    expect(result.recorded?.affected).toBe('>=2.0.0');
+    expect(satisfies('2.0.0', result.recorded!.affected!)).toBe(true);
+    expect(satisfies('2.3.1', result.recorded!.affected!)).toBe(true);
+  });
+
+  test('falls back to the major boundary when nothing was cited', async () => {
+    const store = await freshStore();
+
+    const result = await recordFixOutcome(report({ store, version: '2.6.2', derivedFrom: undefined }));
+
+    expect(result.recorded?.affected).toBe('>=2.0.0');
+  });
+
+  test('takes the earliest cause when several were cited', async () => {
+    const store = await freshStore();
+    await store.upsert([
+      officialKnowledge(),
+      { ...officialKnowledge(), id: 'k_later', fingerprint: 'fp_later', introduced: '2.4.0' },
+    ]);
+
+    const result = await recordFixOutcome(
+      report({ store, version: '2.6.2', derivedFrom: ['k_later', 'k_official'] }),
+    );
+
+    expect(result.recorded?.affected).toBe('>=2.0.0');
   });
 });

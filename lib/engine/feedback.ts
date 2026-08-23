@@ -24,7 +24,7 @@ import {
   type SourceRef,
   type ValidationRecord,
 } from './knowledge';
-import { affectedRange } from './semver';
+import { affectedRange, coerce, parse, sortVersionsAscending } from './semver';
 
 export interface FixReport {
   package: string;
@@ -135,6 +135,7 @@ export async function recordFixOutcome(report: FixReport): Promise<FeedbackResul
   };
 
   const officialAgreement = await officialSourceTypes(store, report.derivedFrom ?? []);
+  const anchor = await fixAnchor(store, report);
 
   const confidence = scoreConfidence({
     sourceTypes: ['verified_fix', ...officialAgreement],
@@ -154,8 +155,8 @@ export async function recordFixOutcome(report: FixReport): Promise<FeedbackResul
     ecosystem,
     fromVersion: report.previousVersion,
     toVersion: report.version,
-    introduced: report.version,
-    affected: affectedRange(report.version),
+    introduced: anchor,
+    affected: affectedRange(anchor),
     title: report.summary,
     description: describeOutcome(report, succeeded),
     summary: report.summary,
@@ -209,6 +210,38 @@ function describeOutcome(report: FixReport, succeeded: boolean): string {
 }
 
 /** Source types of the knowledge an agent acted on, so real documentation can lift the ceiling. */
+/**
+ * The version a verified fix applies *from*.
+ *
+ * Anchoring it to `report.version` is what the reporter happened to be running,
+ * which is the wrong question. A fix for chalk's pure-ESM break reported from
+ * 5.6.2 was stored as `>=5.6.2`, so anyone on 5.0.0 through 5.6.1 — everybody
+ * still stuck on the break — was filtered out of their own answer. Writing back
+ * worked; reading back never did.
+ *
+ * The cause knows where the problem starts, so ask it: the earliest version among
+ * the knowledge the agent cited. With nothing cited, fall back to the major
+ * boundary, which is where a breaking change has to have been introduced. That
+ * can be wider than the truth, but an over-broad match on an agent-authored
+ * record capped at 0.6 confidence costs far less than an invisible one.
+ */
+async function fixAnchor(store: KnowledgeStore, report: FixReport): Promise<string | undefined> {
+  const candidates: string[] = [];
+
+  for (const id of report.derivedFrom ?? []) {
+    const cause = await store.get(id);
+    const from = cause?.introduced ?? (cause?.affected ? coerce(cause.affected.split(/\s+/)[0]) : undefined);
+    if (from && parse(from)) candidates.push(from);
+  }
+
+  if (candidates.length > 0) return sortVersionsAscending(candidates)[0];
+
+  if (!report.version) return undefined;
+
+  const parsed = parse(coerce(report.version));
+  return parsed ? `${parsed.major}.0.0` : report.version;
+}
+
 async function officialSourceTypes(store: KnowledgeStore, ids: string[]) {
   const types = new Set<SourceRef['sourceType']>();
 
