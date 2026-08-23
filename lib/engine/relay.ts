@@ -40,29 +40,27 @@ export const RELAY_TIMEOUT_MS = 30_000;
 export function relayOrigin(): string | undefined {
   const explicit = process.env.RIFT_RELAY_URL?.trim();
   if (explicit === 'off') return undefined;
-  const chosen = explicit || (defaultAllowed ? DEFAULT_RELAY_URL : null);
+  const chosen = explicit || (state().defaultAllowed ? DEFAULT_RELAY_URL : null);
   if (!chosen) return undefined;
   return chosen.replace(/\/+$/, '');
 }
 
 /**
- * Whether the built-in default may be used.
+ * Turns on the built-in default.
  *
- * Off until an entry point turns it on, for the same reason embeddings are:
+ * Off until an entry point calls this, for the same reason embeddings are:
  * anything importing the engine as a library — the test suite above all — must
  * not acquire a network dependency because a constant happened to be compiled
- * in. Setting `RIFT_RELAY_URL` is an explicit request and bypasses this; the
+ * in. Setting `RIFT_RELAY_URL` is an explicit request and bypasses it; the
  * default is the one that has to be asked for.
  */
-let defaultAllowed = false;
-
 export function allowDefaultRelay(): void {
-  defaultAllowed = true;
+  state().defaultAllowed = true;
 }
 
 /** Test seam. */
 export function denyDefaultRelay(): void {
-  defaultAllowed = false;
+  state().defaultAllowed = false;
 }
 
 export function relayConfigured(): boolean {
@@ -80,32 +78,54 @@ export class RelayError extends Error {
 }
 
 /**
- * Endpoints this relay has already refused to serve.
+ * Mutable state, held on `globalThis` rather than in module scope.
  *
- * A deployment can hold some credentials and not others — the common case is a
- * SERP zone with no unlocker, because documentation sites do not block plain
- * requests and an unlocker zone is the expensive one to keep. Without this, a
- * single research run asked a relay that has no unlocker eighteen separate
- * times and fell back to a direct fetch eighteen times, paying a full round
- * trip for each refusal.
+ * Bundling this CLI for Node emits a second, partial copy of small modules for
+ * the symbols the entry file imports directly — `relayConfigured` in
+ * `cli/index.ts` resolved to a duplicate with its own `defaultAllowed`, which
+ * nothing ever set. The engine relayed correctly while `rift stats` reported
+ * every capability `off`, because the two were reading different variables.
  *
- * Keyed by endpoint rather than globally: a relay with no unlocker still has a
- * working SERP zone, and giving up on all of it because one leg is unavailable
- * would throw away the half that raises confidence.
- *
- * Process-lifetime, and deliberately not persisted. A long-running `rift mcp`
- * would otherwise keep refusing an endpoint that came back hours ago.
+ * A `Symbol.for` key is the one identity a bundler cannot fork: it is looked up
+ * in the runtime's global registry, so every copy of this module — however many
+ * the bundler made — reads and writes the same object.
  */
-const unavailable = new Set<string>();
+interface RelayState {
+  /**
+   * Endpoints this relay has already refused to serve.
+   *
+   * A deployment can hold some credentials and not others — the common case is
+   * a SERP zone with no unlocker, because documentation sites do not block
+   * plain requests and the unlocker is the expensive one to keep. Without this,
+   * one research run asked such a relay eighteen times and fell back eighteen
+   * times, paying a round trip for each refusal.
+   *
+   * Keyed by endpoint, not globally: a relay with no unlocker still has a
+   * working SERP zone, and that is the half that raises confidence.
+   *
+   * Process-lifetime, and deliberately not persisted — a long-running
+   * `rift mcp` would otherwise keep refusing an endpoint that came back.
+   */
+  unavailable: Set<string>;
+  /** Whether the compiled-in default may be used. */
+  defaultAllowed: boolean;
+}
+
+const STATE_KEY = Symbol.for('rift.relay.state');
+
+function state(): RelayState {
+  const host = globalThis as unknown as Record<symbol, RelayState | undefined>;
+  return (host[STATE_KEY] ??= { unavailable: new Set<string>(), defaultAllowed: false });
+}
 
 /** Whether this relay is known to be unable to serve an endpoint. */
 export function relayUnavailable(path: string): boolean {
-  return unavailable.has(path);
+  return state().unavailable.has(path);
 }
 
 /** Test seam: the set outlives a single test otherwise. */
 export function resetRelayAvailability(): void {
-  unavailable.clear();
+  state().unavailable.clear();
 }
 
 /**
@@ -132,7 +152,7 @@ function isPermanent(status: number | undefined): boolean {
 export async function relayPost<T>(path: string, payload: unknown, timeoutMs = RELAY_TIMEOUT_MS): Promise<T> {
   const origin = relayOrigin();
   if (!origin) throw new RelayError('No relay configured');
-  if (unavailable.has(path)) throw new RelayError(`Relay ${path} is unavailable on this deployment`);
+  if (state().unavailable.has(path)) throw new RelayError(`Relay ${path} is unavailable on this deployment`);
 
   const response = await fetch(`${origin}${path}`, {
     method: 'POST',
@@ -142,7 +162,7 @@ export async function relayPost<T>(path: string, payload: unknown, timeoutMs = R
   });
 
   if (!response.ok) {
-    if (isPermanent(response.status)) unavailable.add(path);
+    if (isPermanent(response.status)) state().unavailable.add(path);
     const detail = await response.text().catch(() => '');
     throw new RelayError(`Relay ${path} failed (${response.status}): ${detail.slice(0, 200)}`, response.status);
   }
