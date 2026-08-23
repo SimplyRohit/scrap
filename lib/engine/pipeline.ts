@@ -22,6 +22,7 @@ import { cacheReleaseBody } from './research/cache';
 import { fetchDocument, FetchError, type FetchResult } from './research/fetcher';
 import { resolveTargetVersion, tryFetchPackageMetadata, type PackageMetadata, type TargetPolicy } from './research/registry';
 import { buildUpgradeQueries, searchWeb } from './research/search';
+import { reportProgress } from './progress';
 import { classifySource, docsDomain, domainOf, resolveSourcePlan, type SourceCandidate } from './research/sources';
 
 export interface ResearchOptions {
@@ -128,6 +129,7 @@ export async function researchPackageUpgrade(
   }
 
   const change = describeChange(ref, targetVersion);
+  reportProgress({ kind: 'package-target', package: ref.name, from: ref.currentVersion, to: targetVersion ?? null });
 
   // Incremental indexing (gen.md section 23): reuse what we already know.
   if (!refresh && targetVersion && (await store.hasCoverage(ref.name, targetVersion))) {
@@ -140,13 +142,28 @@ export async function researchPackageUpgrade(
 
     if (knowledge.length > 0) {
       trace.servedFromIndex = true;
+      reportProgress({ kind: 'package-cached', package: ref.name });
+
+      // This return is the reason a warm run showed `[0/5]` the whole way
+      // through and never printed a completed package: the only `package-done`
+      // was at the bottom of the function, which this path never reaches. A
+      // progress counter that only counts the slow path is worse than none —
+      // the fast run is the one that looks stuck at zero.
+      const cachedRisk = assessRisk(change, knowledge);
+      reportProgress({
+        kind: 'package-done',
+        package: ref.name,
+        risk: cachedRisk.level,
+        findings: knowledge.length,
+      });
+
       return {
         package: ref.name,
         ecosystem: ref.ecosystem,
         change,
         metadata,
         knowledge,
-        risk: assessRisk(change, knowledge),
+        risk: cachedRisk,
         trace,
         warnings,
       };
@@ -243,10 +260,18 @@ export async function researchPackageUpgrade(
       if (productive >= maxDocuments || attempts >= attemptLimit) break;
       attempts++;
 
+      reportProgress({ kind: 'source-start', package: ref.name, url: candidate.url, planned: planned.length });
+
       let document: FetchResult;
       try {
         document = await fetchDocument(candidate.url, { sourceType: candidate.sourceType, refresh });
       } catch (error) {
+        reportProgress({
+          kind: 'source-failed',
+          package: ref.name,
+          url: candidate.url,
+          reason: error instanceof FetchError ? error.message : String(error),
+        });
         // Speculative URLs are conventions, not promises — a 404 is expected.
         if (!candidate.speculative) {
           trace.failures.push({
@@ -278,12 +303,21 @@ export async function researchPackageUpgrade(
         extracted: knowledge.length,
       });
 
+      reportProgress({
+        kind: 'source-done',
+        package: ref.name,
+        url: candidate.url,
+        extracted: knowledge.length,
+        fromCache: document.fromCache,
+      });
+
       if (!candidate.speculative || knowledge.length > 0) productive++;
     }
 
     // Search discovery, only when the authoritative sources came up short.
     if (allowSearch && extracted.length === 0) {
       const [query] = buildUpgradeQueries(ref.name, ref.currentVersion, targetVersion);
+      reportProgress({ kind: 'search', package: ref.name, query: query.query });
       const results = await searchWeb(query.query, 5);
       trace.usedSearch = results.length > 0;
 
@@ -322,6 +356,13 @@ export async function researchPackageUpgrade(
           fromCache: document.fromCache,
           extracted: knowledge.length,
         });
+        reportProgress({
+          kind: 'source-done',
+          package: ref.name,
+          url: result.url,
+          extracted: knowledge.length,
+          fromCache: document.fromCache,
+        });
       }
     }
   }
@@ -345,13 +386,21 @@ export async function researchPackageUpgrade(
     );
   }
 
+  const risk = assessRisk(change, deduped.knowledge);
+  reportProgress({
+    kind: 'package-done',
+    package: ref.name,
+    risk: risk.level,
+    findings: deduped.knowledge.length,
+  });
+
   return {
     package: ref.name,
     ecosystem: ref.ecosystem,
     change,
     metadata,
     knowledge: deduped.knowledge,
-    risk: assessRisk(change, deduped.knowledge),
+    risk,
     trace,
     warnings,
   };
@@ -383,14 +432,27 @@ export async function researchManifest(
   const targets = only ? parsed.packages.filter((pkg) => only.includes(pkg.name)) : parsed.packages;
   const results: PackageResearchResult[] = new Array(targets.length);
 
+  reportProgress({ kind: 'run-start', total: targets.length });
+
   let cursor = 0;
   const workers = Array.from({ length: Math.min(concurrency, targets.length) }, async () => {
     while (cursor < targets.length) {
       const position = cursor++;
+      // 1-based and reported before the work, so the count reads as "starting
+      // the third of five" rather than as a completion tally that sits at zero
+      // for the first twenty seconds.
+      reportProgress({
+        kind: 'package-start',
+        package: targets[position].name,
+        index: position + 1,
+        total: targets.length,
+      });
       results[position] = await researchPackageUpgrade(targets[position], researchOptions);
     }
   });
   await Promise.all(workers);
+
+  reportProgress({ kind: 'run-done', total: targets.length });
 
   const settled = results.filter(Boolean);
 
