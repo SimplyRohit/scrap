@@ -321,6 +321,36 @@ export const SURFACES = [
   },
 ] as const;
 
+/**
+ * The three doors, and how to open each one — the README's "Three ways in".
+ *
+ * Kept next to the surfaces they install rather than in a docs page nobody
+ * scrolls to: the reason someone reads that section is that they have decided
+ * to try it, and the command should be under their cursor at that moment.
+ */
+export const INSTALL_STEPS = [
+  {
+    index: "01",
+    name: "Terminal & CI",
+    command: "npm i -g riftcli",
+    body: "Install once and the command is rift — the npm name is riftcli, because rift on npm belongs to someone else.",
+    then: "rift repo . --fail-on HIGH",
+    note: "exit 2 when something reaches HIGH",
+  },
+  {
+    index: "02",
+    name: "Any MCP agent",
+    command: "rift mcp",
+    body: "The same engine over stdio. Arguments are typed, and a tool failure comes back as a result rather than as something to parse out of stderr.",
+  },
+  {
+    index: "03",
+    name: "Claude Code",
+    command: "rift install-skill",
+    body: "Installs the skill, and the agent reaches for rift on its own. Other harnesses want skills/generic/AGENT.md — the same engine, documented over HTTP.",
+  },
+] as const;
+
 export const RULES = [
   {
     title: "Every claim carries its quote",

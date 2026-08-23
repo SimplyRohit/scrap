@@ -18,7 +18,7 @@ export function Faq() {
           <SectionHeading
             id="faq-title"
             label="FAQ"
-            index="08"
+            index="09"
             title={
               <>
                 The parts people <Accent>ask about twice.</Accent>

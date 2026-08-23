@@ -12,7 +12,7 @@ export function Rules() {
         <SectionHeading
           id="rules-title"
           label="Rules & limits"
-          index="07"
+          index="08"
           title={
             <>
               What it holds to — and what it <Accent>admits it cannot do.</Accent>

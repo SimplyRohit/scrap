@@ -28,6 +28,7 @@ export const PAGE_NAV = [
   { label: "Pipeline", href: "/#pipeline" },
   { label: "Modes", href: "/#modes" },
   { label: "Radius", href: "/#radius" },
+  { label: "Install", href: "/#install" },
   { label: "FAQ", href: "/#faq" },
 ] as const;
 

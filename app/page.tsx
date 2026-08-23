@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/layout/site-header";
 import { Cta } from "@/components/sections/cta";
 import { Evidence } from "@/components/sections/evidence";
 import { Faq } from "@/components/sections/faq";
+import { Install } from "@/components/sections/install";
 import { Hero } from "@/components/sections/hero";
 import { Modes } from "@/components/sections/modes";
 import { Pipeline } from "@/components/sections/pipeline";
@@ -30,6 +31,7 @@ export default function HomePage() {
         <Modes />
         <Radius />
         <Surfaces />
+        <Install />
         <Rules />
         <Faq />
         <Cta />
