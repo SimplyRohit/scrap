@@ -11,10 +11,13 @@ export const SITE = {
   url: "https://rift-cli.vercel.app",
   repo: "https://github.com/SimplyRohit/scrap",
   twitter: "@riftdev",
-  // The npm package is `riftcli`, not `rift` — that name belongs to someone else's
-  // game maths library. `npx riftcli` needs no prior install; a bare `rift` only
-  // works after `npm i -g riftcli`, which the page never tells the reader to run.
-  install: "npx riftcli repo . --fail-on HIGH",
+  // The package is `riftcli`; the command it installs is `rift`. The npm name
+  // `rift` belongs to someone else's game maths library, so the two can never be
+  // collapsed into one word. Showing the install line is what earns the right to
+  // write the short command everywhere else — without it, a bare `rift` is an
+  // instruction the reader cannot follow.
+  install: "npm i -g riftcli",
+  command: "rift repo . --fail-on HIGH",
   founded: "2025",
 } as const;
 
