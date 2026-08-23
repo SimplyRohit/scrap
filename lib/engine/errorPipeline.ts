@@ -30,6 +30,7 @@ import {
   type MigrationStep,
   type SourceType,
 } from './knowledge';
+import { cacheReleaseBody } from './research/cache';
 import { fetchDocument } from './research/fetcher';
 import { releaseForTag, searchIssues, type GitHubIssue } from './research/github';
 import { tryFetchPackageMetadata, type PackageMetadata } from './research/registry';
@@ -216,6 +217,7 @@ async function researchError(
       if (!release?.body) continue;
 
       const title = release.name || `${fingerprint.package} ${version}`;
+      await cacheReleaseBody(release.htmlUrl, release.body);
       const normalized = normalizeDocument(release.body, 'text/markdown', title);
       found.push(
         ...extractKnowledge(normalized, {
@@ -226,6 +228,8 @@ async function researchError(
           maxClaims: 25,
           source: {
             url: release.htmlUrl,
+            // Cited as the release page, read from the API.
+            retrievalUrl: `https://api.github.com/repos/${metadata.githubSlug}/releases/tags/${release.tagName}`,
             domain: 'github.com',
             sourceType: 'official_release',
             trustScore: SOURCE_TRUST.official_release,

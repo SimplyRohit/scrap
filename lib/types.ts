@@ -18,7 +18,7 @@ export interface ManifestParseResult {
 }
 
 /** How a source was retrieved. */
-export type SourceTransport = 'brightdata' | 'direct' | 'cache';
+export type SourceTransport = 'brightdata' | 'direct' | 'cache' | 'api';
 
 export interface ResearchedSource {
   /** Version this source documents, when the engine could anchor one. */

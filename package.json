@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "bun test lib/engine cli",
+    "test": "bun test lib cli",
     "typecheck": "tsc --noEmit",
     "cli": "bun cli/index.ts"
   },

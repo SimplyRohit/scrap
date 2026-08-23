@@ -11,6 +11,7 @@
 
 import { normalizeForHash, shortHash } from '../hash';
 import {
+  BREAKING_TYPES,
   severityForType,
   type Ecosystem,
   type KnowledgeObject,
@@ -83,8 +84,12 @@ const SECURITY_SUBSTANCE =
 
 const CLASSIFIERS: Array<{ type: KnowledgeType; pattern: RegExp }> = [
   { type: 'security_fix', pattern: SECURITY_SUBSTANCE },
-  { type: 'removed_api', pattern: /\b(has been|have been|was|were|is|are)?\s*removed\b|\bno longer (exists?|available|supported|works?)\b|\bdropped support\b|\bdeleted\b/i },
-  { type: 'renamed_api', pattern: /\brenamed\b|\bnow (called|named)\b|\bhas been renamed to\b/i },
+  // The leading `^remove[sd]?` alternative catches the imperative bullet a
+  // changelog actually writes — "Remove `prefix` as a function". Anchoring it to
+  // the start keeps incidental prose ("a function so interceptors can be
+  // removed") out, which is what the past-tense alternatives already handle.
+  { type: 'removed_api', pattern: /^\s*remove[sd]?\b|\b(has been|have been|was|were|is|are)?\s*removed\b|\bno longer (exists?|available|supported|works?)\b|\bdropped support\b|\bdeleted\b/i },
+  { type: 'renamed_api', pattern: /^\s*rename[sd]?\b|\brenamed\b|\bnow (called|named)\b|\bhas been renamed to\b/i },
   { type: 'deprecated_api', pattern: /\bdeprecat/i },
   { type: 'runtime_requirement', pattern: /\b(node(\.js)?|python|bun|deno)\s*(>=|>|version)?\s*\d+(\.\d+)?\b.*(required|minimum|no longer|support)|minimum (required )?(node|python) version/i },
   { type: 'dependency_requirement', pattern: /\bpeer dependenc|requires? [\w@/-]+ (>=|\^|version)\s*\d/i },
@@ -199,12 +204,28 @@ function classify(
   }
 
   for (const [pattern, type] of CHANGELOG_HEADING) {
+    if (!pattern.test(heading)) continue;
+
     // `Fixed` / `Security` behave like a maintenance section: a fix is kept
     // whatever its wording, because "was this fixed?" is a question the index
     // has to answer and fix prose rarely asserts anything.
-    if (pattern.test(heading)) {
-      return { type, basis: type === 'bug_fix' || type === 'security_fix' ? 'maintenance' : 'heading' };
+    if (type === 'bug_fix' || type === 'security_fix') return { type, basis: 'maintenance' };
+
+    // `Changed` is the one vague heading: it is a container, not a verdict, and
+    // "Removed `max-w-auto`" or "Rename `@variant` to `@custom-variant`" sit
+    // under it happily. Taking its word filed 34 of Tailwind 4's breaking
+    // changes as behaviour notes, invisible to every report surface.
+    //
+    // The other headings stay authoritative. `Added` really does mean new, even
+    // when the prose says "so that interceptors can be removed" — reading a
+    // breaking change out of that incidental wording is how this went wrong the
+    // first time.
+    if (type === 'behavior_change') {
+      const substance = classifyProse(text);
+      if (substance && BREAKING_TYPES.has(substance)) return { type: substance, basis: 'text' };
     }
+
+    return { type, basis: 'heading' };
   }
 
   // A maintenance section demotes its contents; only an explicit marker escapes.

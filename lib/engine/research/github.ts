@@ -147,8 +147,13 @@ export function prioritizeReleases(releases: GitHubRelease[], toVersion: string,
 }
 
 /** Falls back to a single tagged release when the window is empty or unresolvable. */
-export async function releaseForTag(slug: string, version: string, refresh = false): Promise<GitHubRelease | null> {
-  for (const tag of [`v${version}`, version]) {
+export async function releaseForTag(
+  slug: string,
+  version: string,
+  refresh = false,
+  packageName?: string,
+): Promise<GitHubRelease | null> {
+  for (const tag of tagCandidates(version, packageName)) {
     const raw = await githubJson<RawRelease>(
       `https://api.github.com/repos/${slug}/releases/tags/${encodeURIComponent(tag)}`,
       refresh,
@@ -191,11 +196,59 @@ export async function searchIssues(slug: string, query: string, refresh = false,
   }));
 }
 
+/**
+ * The repository's real default branch.
+ *
+ * `main` and `master` cover most repositories and miss the rest — `trunk`,
+ * `develop`, `next`, and anything else a project chose. Guessing means every
+ * in-repo changelog probe 404s silently and the package looks undocumented. The
+ * API states the answer, so ask once and cache it.
+ */
+export async function defaultBranch(slug: string, refresh = false): Promise<string | null> {
+  const repository = await githubJson<{ default_branch?: string }>(
+    `https://api.github.com/repos/${slug}`,
+    refresh,
+  );
+  return repository?.default_branch ?? null;
+}
+
+/**
+ * Branches to probe, best first.
+ *
+ * The known default leads. `main` and `master` stay as fallbacks because the API
+ * call can fail — no token means 60 requests an hour, and a rate-limited lookup
+ * must not take the whole changelog probe down with it.
+ */
+export function branchCandidates(known?: string | null): string[] {
+  return [...new Set([known, 'main', 'master'].filter((branch): branch is string => Boolean(branch)))];
+}
+
+/**
+ * Tag spellings a release may use, best first.
+ *
+ * `v1.2.3` and `1.2.3` are both common. Monorepos published with changesets or
+ * Lerna tag as `package@1.2.3`, which neither of the other two forms finds.
+ */
+export function tagCandidates(version: string, packageName?: string): string[] {
+  const tags = [`v${version}`, version];
+  if (packageName) {
+    tags.push(`${packageName}@${version}`);
+    const unscoped = packageName.replace(/^@[^/]+\//, '');
+    if (unscoped !== packageName) tags.push(`${unscoped}@${version}`);
+  }
+  return [...new Set(tags)];
+}
+
 /** Raw file from the default branch, used for CHANGELOG and migration docs in-repo. */
-export async function fetchRepoFile(slug: string, filePath: string, refresh = false): Promise<string | null> {
-  for (const branch of ['main', 'master']) {
+export async function fetchRepoFile(
+  slug: string,
+  filePath: string,
+  refresh = false,
+  branch?: string | null,
+): Promise<string | null> {
+  for (const candidate of branchCandidates(branch)) {
     const document = await tryFetchDocument(
-      `https://raw.githubusercontent.com/${slug}/${branch}/${filePath}`,
+      `https://raw.githubusercontent.com/${slug}/${candidate}/${filePath}`,
       { sourceType: 'official_changelog', refresh, transport: 'direct' },
     );
     if (document) return document.body;
@@ -203,12 +256,26 @@ export async function fetchRepoFile(slug: string, filePath: string, refresh = fa
   return null;
 }
 
-export async function fetchReleaseBodyOrThrow(slug: string, version: string): Promise<string> {
-  const release = await releaseForTag(slug, version);
+export async function fetchReleaseBodyOrThrow(
+  slug: string,
+  version: string,
+  packageName?: string,
+): Promise<string> {
+  const release = await releaseForTag(slug, version, false, packageName);
   if (release) return release.body;
 
-  const document = await fetchDocument(`https://github.com/${slug}/releases/tag/v${version}`, {
-    sourceType: 'official_release',
-  });
-  return document.body;
+  // The API found nothing, so fall back to the HTML page — and try each tag
+  // spelling there too, since the API and the page agree on the tag name.
+  let lastError: unknown;
+  for (const tag of tagCandidates(version, packageName)) {
+    try {
+      const document = await fetchDocument(`https://github.com/${slug}/releases/tag/${tag}`, {
+        sourceType: 'official_release',
+      });
+      return document.body;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`No release page for ${slug} ${version}`);
 }

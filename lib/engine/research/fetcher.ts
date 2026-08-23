@@ -29,6 +29,8 @@ export interface FetchOptions {
   refresh?: boolean;
   transport?: Transport;
   timeoutMs?: number;
+  /** Wait between same-route retries. Zero in tests, so they do not sleep. */
+  retryDelayMs?: number;
 }
 
 export interface FetchResult extends CacheEntry {
@@ -106,12 +108,50 @@ async function fetchViaBrightData(
 }
 
 /**
+ * Statuses that say "this route did not work", rather than "this page is not
+ * there". A 404 is an answer; a 403 or a 502 is an obstacle.
+ */
+function isWorthAnotherRoute(status: number): boolean {
+  return status === 403 || status === 429 || status === 451 || status >= 500;
+}
+
+/**
+ * Routes to try, in order.
+ *
+ * Bright Data falling back to direct was already here: a misconfigured zone
+ * should cost coverage, not the run. The reverse was missing, and it is the
+ * more common failure — a documentation host that blocks a plain request is the
+ * whole reason the unlocker transport exists. An explicit `transport` is
+ * honoured exactly, because a caller that names one is not guessing.
+ */
+function escalation(chosen: 'direct' | 'brightdata', requested: Transport): Array<'direct' | 'brightdata'> {
+  if (requested !== 'auto') return [chosen];
+  if (chosen === 'brightdata') return ['brightdata', 'direct'];
+
+  // A direct choice under `auto` means either no unlocker is configured, or the
+  // host is one that rejects proxies. Neither has anywhere to escalate to.
+  return ['direct'];
+}
+
+/**
+ * Attempts per route.
+ *
+ * The hosts with no second route are the ones most likely to rate-limit:
+ * GitHub allows 60 requests an hour without a token, and answers 403 or 429
+ * when that runs out. One attempt turns a momentary limit into a missing
+ * source for the whole run.
+ */
+const ATTEMPTS_PER_ROUTE = 2;
+
+const sleep = (ms: number) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve());
+
+/**
  * Fetches a document, preferring a fresh cache entry, then a conditional
- * revalidation, then a full fetch. Bright Data failures fall back to a direct
- * fetch so a misconfigured zone degrades coverage instead of breaking the run.
+ * revalidation, then a full fetch. A blocked or failing route escalates to the
+ * other transport rather than failing the run.
  */
 export async function fetchDocument(url: string, options: FetchOptions): Promise<FetchResult> {
-  const { sourceType, refresh = false, transport = 'auto', timeoutMs = 30_000 } = options;
+  const { sourceType, refresh = false, transport = 'auto', timeoutMs = 30_000, retryDelayMs = 750 } = options;
 
   const cached = await readCache(url);
   if (cached && !refresh && isFresh(cached, sourceType)) {
@@ -119,23 +159,51 @@ export async function fetchDocument(url: string, options: FetchOptions): Promise
   }
 
   const chosen = chooseTransport(url, transport);
-  let result: { status: number; body: string; headers: Headers };
-  let usedTransport: 'direct' | 'brightdata' = chosen;
+  const headers = refresh ? {} : revalidationHeaders(cached);
 
-  try {
-    result =
-      chosen === 'brightdata'
-        ? await fetchViaBrightData(url, timeoutMs)
-        : await fetchDirect(url, refresh ? {} : revalidationHeaders(cached), timeoutMs);
-  } catch (error) {
-    if (chosen === 'brightdata') {
-      usedTransport = 'direct';
-      result = await fetchDirect(url, {}, timeoutMs);
-    } else {
-      throw error instanceof FetchError
-        ? error
-        : new FetchError(error instanceof Error ? error.message : String(error), url);
+  const attempt = async (via: 'direct' | 'brightdata') =>
+    via === 'brightdata' ? fetchViaBrightData(url, timeoutMs) : fetchDirect(url, headers, timeoutMs);
+
+  const routes = escalation(chosen, transport);
+
+  let result: { status: number; body: string; headers: Headers } | null = null;
+  let usedTransport: 'direct' | 'brightdata' = chosen;
+  let lastError: unknown = new FetchError(`No transport available for ${url}`, url);
+
+  outer: for (const [index, via] of routes.entries()) {
+    const isLastRoute = index === routes.length - 1;
+
+    for (let tries = 1; tries <= ATTEMPTS_PER_ROUTE; tries++) {
+      const isLastTry = tries === ATTEMPTS_PER_ROUTE;
+
+      try {
+        const attempted = await attempt(via);
+
+        // A block or a server fault is an obstacle, not an answer. Retry the
+        // same route once, then try the other one. A 404 is an answer and stops
+        // here, or every speculative probe would cost four requests.
+        if (isWorthAnotherRoute(attempted.status) && !(isLastRoute && isLastTry)) {
+          lastError = new FetchError(`HTTP ${attempted.status} for ${url}`, url, attempted.status);
+          if (isLastTry) continue outer;
+          await sleep(retryDelayMs);
+          continue;
+        }
+
+        result = attempted;
+        usedTransport = via;
+        break outer;
+      } catch (error) {
+        lastError = error;
+        if (isLastTry) continue outer;
+        await sleep(retryDelayMs);
+      }
     }
+  }
+
+  if (!result) {
+    throw lastError instanceof FetchError
+      ? lastError
+      : new FetchError(lastError instanceof Error ? lastError.message : String(lastError), url);
   }
 
   // Unchanged since last fetch — keep the cached body, refresh the timestamp.

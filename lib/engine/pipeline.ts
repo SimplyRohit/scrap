@@ -18,10 +18,11 @@ import { backfillEmbeddings } from './index/backfill';
 import { getStore, type KnowledgeStore } from './index/store';
 import type { PackageRef } from './request';
 import { prioritizeReleases, releaseForTag, releasesInWindow } from './research/github';
+import { cacheReleaseBody } from './research/cache';
 import { fetchDocument, FetchError, type FetchResult } from './research/fetcher';
 import { resolveTargetVersion, tryFetchPackageMetadata, type PackageMetadata, type TargetPolicy } from './research/registry';
 import { buildUpgradeQueries, searchWeb } from './research/search';
-import { classifySource, docsDomain, domainOf, planUpgradeSources, type SourceCandidate } from './research/sources';
+import { classifySource, docsDomain, domainOf, resolveSourcePlan, type SourceCandidate } from './research/sources';
 
 export interface ResearchOptions {
   /** Bypass both the fetch cache and index coverage checks. */
@@ -182,6 +183,10 @@ export async function researchPackageUpgrade(
           speculative: false,
         };
 
+        // The body arrived through the releases listing, so nothing has it under
+        // the URL we cite. Store it there, or it can never be re-extracted.
+        await cacheReleaseBody(release.htmlUrl, release.body);
+
         const document = normalizeDocument(release.body, 'text/markdown', candidate.title);
         const knowledge = extractKnowledge(document, {
           package: ref.name,
@@ -191,6 +196,8 @@ export async function researchPackageUpgrade(
           toVersion: targetVersion,
           source: {
             url: release.htmlUrl,
+            // Cited as the release page, read from the API.
+            retrievalUrl: `https://api.github.com/repos/${metadata.githubSlug}/releases/tags/${release.tagName}`,
             domain: 'github.com',
             sourceType: 'official_release',
             trustScore: SOURCE_TRUST.official_release,
@@ -214,7 +221,7 @@ export async function researchPackageUpgrade(
     }
 
     // Planned document sources, in priority order, until the budget is spent.
-    const planned = planUpgradeSources(metadata, targetVersion);
+    const planned = await resolveSourcePlan(metadata, targetVersion, { refresh });
     trace.planned = planned.length;
 
     /**
@@ -224,7 +231,9 @@ export async function researchPackageUpgrade(
      * attempts are still bounded so a package with many dead conventions cannot
      * fan out indefinitely.
      */
-    let productive = trace.fetched.length;
+    // Release notes that documented nothing must not spend the budget. Five empty
+    // patch releases would otherwise starve the CHANGELOG and the migration guide.
+    let productive = trace.fetched.filter((entry) => entry.extracted > 0).length;
     let attempts = 0;
     // A floor matters at small budgets: with maxDocuments=2 a limit of 6 could be
     // spent entirely on dead ends before reaching a real source.

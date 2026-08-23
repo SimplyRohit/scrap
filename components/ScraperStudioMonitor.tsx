@@ -7,6 +7,7 @@ const TRANSPORT_LABEL: Record<SourceTransport, { label: string; color: string; i
   brightdata: { label: "Unlocker", color: "var(--amber)", icon: Shield },
   direct:     { label: "Direct",   color: "var(--cyan)",  icon: Globe },
   cache:      { label: "Cache",    color: "var(--green)", icon: Database },
+  api:        { label: "API",      color: "var(--cyan)",  icon: Database },
 };
 
 export default function ScraperStudioMonitor({ analysis }: { analysis: FullBlastRadiusAnalysis | null }) {

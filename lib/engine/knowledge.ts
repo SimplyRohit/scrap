@@ -67,7 +67,17 @@ export type Provenance = 'official' | 'community' | 'agent_generated' | 'verifie
 export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
 export interface SourceRef {
+  /** The URL a reader should be shown. */
   url: string;
+  /**
+   * Where the body was actually retrieved, when that differs from `url`.
+   *
+   * Release notes are read from the GitHub API but cited as the release page,
+   * so the citation is useful to a human. Without recording both, nothing can
+   * find the document again — offline re-extraction looked at an index full of
+   * `github.com/.../releases/tag/v1` and a cache full of `api.github.com/...`.
+   */
+  retrievalUrl?: string;
   domain: string;
   sourceType: SourceType;
   /** Baseline authority of the source itself, before per-claim evidence scoring. */
@@ -228,6 +238,21 @@ const TYPE_SEVERITY: Partial<Record<KnowledgeType, Severity>> = {
 export function severityForType(type: KnowledgeType): Severity {
   return TYPE_SEVERITY[type] ?? 'MEDIUM';
 }
+
+/**
+ * Types that mean "a consumer must change something". Shared, because both the
+ * classifier and the risk scorer have to agree on what counts as breaking — and
+ * they diverged once already.
+ */
+export const BREAKING_TYPES = new Set<KnowledgeType>([
+  'breaking_change',
+  'removed_api',
+  'renamed_api',
+  'runtime_requirement',
+  'dependency_requirement',
+  'configuration_change',
+  'environment_change',
+]);
 
 export const SEVERITY_ORDER: Record<Severity, number> = {
   CRITICAL: 0,

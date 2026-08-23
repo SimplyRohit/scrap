@@ -7,6 +7,7 @@
  * coding agent (section 19), and `--fail-on` so it can gate CI.
  */
 
+import { writeStdout } from '../lib/stdout';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -30,9 +31,10 @@ import {
 import { isRepositoryHousekeeping } from '../lib/engine/analysis/extract';
 import { applicableKnowledge, correlateRepository } from '../lib/engine/analysis/repository';
 import { initializeEngine } from '../lib/engine/bootstrap';
-import { isBreaking, type RiskLevel } from '../lib/engine/analysis/versionDiff';
+import { isBreakingInWindow, type RiskLevel } from '../lib/engine/analysis/versionDiff';
 import { recordFixOutcome } from '../lib/engine/feedback';
 import { backfillEmbeddings } from '../lib/engine/index/backfill';
+import { reindexFromCache } from '../lib/engine/index/reindex';
 import { embedQuery } from '../lib/engine/index/embeddings';
 import { buildKnowledgeGraph, subgraph } from '../lib/engine/index/graph';
 import { getStore } from '../lib/engine/index/store';
@@ -49,7 +51,7 @@ import {
 import { researchManifest, researchPackageUpgrade, type PackageResearchResult } from '../lib/engine/pipeline';
 import { brightDataConfigured } from '../lib/engine/research/fetcher';
 import { tryFetchPackageMetadata } from '../lib/engine/research/registry';
-import { planUpgradeSources } from '../lib/engine/research/sources';
+import { resolveSourcePlan } from '../lib/engine/research/sources';
 import { serpConfigured } from '../lib/engine/research/search';
 
 const USAGE = `
@@ -68,6 +70,8 @@ ${bold('Commands')}
   graph <name> [--version <v>]             Show the knowledge graph for a package
   backfill                                 Embed indexed knowledge (needs VOYAGE_API_KEY)
   prune                                    Drop indexed entries the current rules reject
+  reindex [name]                           Re-extract cached documents under current rules
+  mcp                                      Serve the engine over MCP on stdio
   sources <name>                           Show the sources that would be researched
   report --package <p> --summary <s>       Record a fix outcome (validation feedback)
   stats                                    Index statistics and engine capabilities
@@ -99,7 +103,7 @@ function fail(message: string): never {
 }
 
 function emitJson(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  writeStdout(`${JSON.stringify(value, null, 2)}\n`);
 }
 
 function researchOptions(args: ParsedArgs) {
@@ -110,8 +114,10 @@ function researchOptions(args: ParsedArgs) {
 }
 
 function printKnowledge(knowledge: KnowledgeObject[], limit = 20): void {
-  const breaking = knowledge.filter(isBreaking).sort((a, b) => b.confidence - a.confidence);
-  const rest = knowledge.filter((item) => !isBreaking(item));
+  // Out-of-window claims fall into `rest`, so they are still counted, never shown
+  // as work this upgrade requires.
+  const breaking = knowledge.filter(isBreakingInWindow).sort((a, b) => b.confidence - a.confidence);
+  const rest = knowledge.filter((item) => !isBreakingInWindow(item));
 
   if (breaking.length === 0) {
     process.stdout.write(dim('  No breaking changes were extracted from the sources read.\n'));
@@ -331,7 +337,7 @@ async function commandRepo(args: ParsedArgs): Promise<number> {
 
   for (const result of [...research.results].sort((a, b) => b.risk.score - a.risk.score)) {
     const impact = impacts[result.package];
-    const breaking = result.knowledge.filter(isBreaking);
+    const breaking = result.knowledge.filter(isBreakingInWindow);
     const applicable = impact ? applicableKnowledge(breaking, impact).length : breaking.length;
 
     rows.push([
@@ -443,7 +449,7 @@ async function commandSources(args: ParsedArgs): Promise<number> {
   if (!metadata) fail(`registry lookup failed for ${name}`);
 
   const target = stringFlag(args.flags, 'to') ?? metadata.latestVersion ?? 'latest';
-  const plan = planUpgradeSources(metadata, target);
+  const plan = await resolveSourcePlan(metadata, target);
 
   if (boolFlag(args.flags, 'json')) {
     emitJson({ metadata, plan });
@@ -644,6 +650,72 @@ async function commandPrune(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+/**
+ * Rebuilds the index from the documents already in the fetch cache.
+ *
+ * Reclassification needs the original document, because a claim's type depends
+ * on the heading it sat under. The documents are cached, so this costs nothing
+ * and needs no network — unlike re-researching, which re-scrapes every source.
+ */
+async function commandReindex(args: ParsedArgs): Promise<number> {
+  const dryRun = !boolFlag(args.flags, 'apply');
+  const result = await reindexFromCache({
+    package: args.positional[0],
+    dryRun,
+    pruneMissing: boolFlag(args.flags, 'prune-missing'),
+  });
+
+  if (boolFlag(args.flags, 'json')) {
+    emitJson({ applied: !dryRun, ...result });
+    return 0;
+  }
+
+  process.stdout.write(
+    `${result.documents} cached document(s) re-extracted, ${result.missing} no longer cached\n`,
+  );
+  process.stdout.write(`${result.extracted} knowledge object(s) under current rules\n`);
+
+  for (const change of result.reclassified.slice(0, 20)) {
+    process.stdout.write(`  ${yellow('retype')} ${change}\n`);
+  }
+  for (const gone of result.removed.slice(0, 20)) {
+    process.stdout.write(`  ${dim(result.removalsHeld ? 'kept' : 'drop')}   ${gone}\n`);
+  }
+
+  if (result.removalsHeld) {
+    process.stdout.write(
+      `\n${yellow('held')} ${result.removed.length} object(s) were not reproduced but were kept.\n` +
+        `${dim('Re-extraction is not a guaranteed replay — the claim budget alone can explain this.')}\n` +
+        `${dim('Review the list, then pass --prune-missing if the removals are right.')}\n`,
+    );
+  }
+
+  if (dryRun && (result.removed.length > 0 || result.reclassified.length > 0)) {
+    process.stdout.write(`\nNothing was written. Re-run with --apply.\n`);
+  }
+
+  // A document the index references but the cache no longer holds cannot be
+  // re-extracted here; only re-researching that package will correct it.
+  if (result.missing > 0) {
+    process.stdout.write(
+      `${dim(`${result.missing} document(s) are no longer cached — re-run research with --refresh to correct those`)}\n`,
+    );
+  }
+
+  return 0;
+}
+
+/**
+ * Serves the engine over MCP (gen.md section 18).
+ *
+ * stdout belongs to the protocol from here on, so nothing else may print to it.
+ */
+async function commandMcp(): Promise<number> {
+  const { runStdioServer } = await import('../lib/mcp/server');
+  await runStdioServer();
+  return 0;
+}
+
 const COMMANDS: Record<string, (args: ParsedArgs) => Promise<number>> = {
   package: commandPackage,
   migrate: commandPackage,
@@ -654,6 +726,8 @@ const COMMANDS: Record<string, (args: ParsedArgs) => Promise<number>> = {
   graph: commandGraph,
   backfill: commandBackfill,
   prune: commandPrune,
+  reindex: commandReindex,
+  mcp: commandMcp,
   sources: commandSources,
   report: commandReport,
   stats: commandStats,
@@ -680,13 +754,30 @@ export async function run(argv: string[]): Promise<number> {
   return handler(args);
 }
 
+/**
+ * `process.exit` discards whatever stdout has not yet handed to the OS. A pipe
+ * takes 64 KiB before it blocks, so `--json | jq` silently truncated every
+ * report bigger than that — the file redirect was fine, which is why it looked
+ * like a jq problem. Wait for the drain, then exit.
+ */
+async function flushStdout(): Promise<void> {
+  if (process.stdout.writableLength === 0) return;
+  await new Promise<void>((resolve) => {
+    process.stdout.write('', () => resolve());
+  });
+}
+
 // `import.meta.main` is true only when executed directly, so the module stays
 // importable from tests without running the CLI.
 if (import.meta.main) {
   run(process.argv.slice(2))
-    .then((code) => process.exit(code))
-    .catch((error: unknown) => {
+    .then(async (code) => {
+      await flushStdout();
+      process.exit(code);
+    })
+    .catch(async (error: unknown) => {
       process.stderr.write(`${red('error')} ${error instanceof Error ? error.message : String(error)}\n`);
+      await flushStdout();
       process.exit(1);
     });
 }

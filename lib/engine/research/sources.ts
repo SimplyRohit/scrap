@@ -7,6 +7,7 @@
  */
 
 import { SOURCE_TRUST, sourcePriority, type SourceType } from '../knowledge';
+import { branchCandidates, defaultBranch, tagCandidates } from './github';
 import type { PackageMetadata } from './registry';
 
 export interface SourceCandidate {
@@ -126,7 +127,7 @@ export function docsDomain(metadata: PackageMetadata): string | undefined {
 export function planUpgradeSources(
   metadata: PackageMetadata,
   toVersion: string,
-  options: { includeSpeculative?: boolean } = {},
+  options: { includeSpeculative?: boolean; defaultBranch?: string | null } = {},
 ): SourceCandidate[] {
   const { includeSpeculative = true } = options;
   const candidates: SourceCandidate[] = [];
@@ -153,19 +154,29 @@ export function planUpgradeSources(
   }
 
   if (metadata.githubSlug) {
-    candidates.push(
-      candidate(
-        `https://github.com/${metadata.githubSlug}/releases/tag/v${toVersion}`,
-        'official_release',
-        `${metadata.name} v${toVersion} release notes`,
-        'release notes for the target version',
-      ),
-    );
+    // Tag spellings differ by project: `v1.2.3`, `1.2.3`, or `pkg@1.2.3` in a
+    // monorepo. Only the first is a real candidate; the rest are speculative so
+    // a 404 costs nothing and stays out of the trace.
+    tagCandidates(toVersion, metadata.name).forEach((tag, index) => {
+      candidates.push(
+        candidate(
+          `https://github.com/${metadata.githubSlug}/releases/tag/${tag}`,
+          'official_release',
+          `${metadata.name} ${tag} release notes`,
+          'release notes for the target version',
+          index > 0,
+        ),
+      );
+    });
+
+    // The real default branch first. `main` and `master` follow, because the
+    // lookup that provides it can be rate-limited away.
+    const branch = branchCandidates(options.defaultBranch)[0];
 
     for (const file of ['CHANGELOG.md', 'HISTORY.md', 'docs/migration.md', 'UPGRADING.md']) {
       candidates.push(
         candidate(
-          `https://raw.githubusercontent.com/${metadata.githubSlug}/main/${file}`,
+          `https://raw.githubusercontent.com/${metadata.githubSlug}/${branch}/${file}`,
           file.toLowerCase().includes('migrat') || file.toLowerCase().includes('upgrad')
             ? 'official_migration_guide'
             : 'official_changelog',
@@ -240,4 +251,23 @@ export function domainOf(url: string): string {
   } catch {
     return 'unknown';
   }
+}
+
+/**
+ * Plans sources and resolves the repository's default branch first.
+ *
+ * Kept separate from `planUpgradeSources` so planning stays synchronous and
+ * testable. Callers that are about to research use this; callers that only want
+ * to show a plan can use the sync form and accept the `main`/`master` guess.
+ */
+export async function resolveSourcePlan(
+  metadata: PackageMetadata,
+  toVersion: string,
+  options: { includeSpeculative?: boolean; refresh?: boolean } = {},
+): Promise<SourceCandidate[]> {
+  const branch = metadata.githubSlug
+    ? await defaultBranch(metadata.githubSlug, options.refresh).catch(() => null)
+    : null;
+
+  return planUpgradeSources(metadata, toVersion, { ...options, defaultBranch: branch });
 }

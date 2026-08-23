@@ -10,7 +10,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { sha256, shortHash } from '../hash';
-import { CACHE_DIR, ensureDataDirs } from '../paths';
+import { cacheDir, ensureDataDirs } from '../paths';
 import type { SourceType } from '../knowledge';
 
 export interface CacheEntry {
@@ -22,8 +22,15 @@ export interface CacheEntry {
   etag?: string;
   lastModified?: string;
   retrievedAt: string;
-  /** How the body was obtained, for provenance reporting. */
-  transport: 'brightdata' | 'direct' | 'cache';
+  /**
+   * How the body was obtained, for provenance reporting.
+   *
+   * `api` means the body came from a structured endpoint rather than the page
+   * it is cited as — release notes are read from the GitHub releases listing
+   * and cited as the release page. Storing it under the cited URL is what makes
+   * the document re-readable later; calling it `direct` would be a lie.
+   */
+  transport: 'brightdata' | 'direct' | 'cache' | 'api';
 }
 
 /**
@@ -46,7 +53,7 @@ const TTL_MS: Record<SourceType, number> = {
 };
 
 function cachePath(url: string): string {
-  return path.join(CACHE_DIR, `${shortHash(url, 24)}.json`);
+  return path.join(cacheDir(), `${shortHash(url, 24)}.json`);
 }
 
 export async function readCache(url: string): Promise<CacheEntry | null> {
@@ -79,4 +86,25 @@ export function revalidationHeaders(entry: CacheEntry | null): Record<string, st
 
 export function hashBody(body: string): string {
   return sha256(body);
+}
+
+/**
+ * Stores a body under the URL it is cited as.
+ *
+ * Release notes are read from the GitHub releases listing but cited as the
+ * release page, so nothing holds that page's content. Offline re-extraction
+ * looked for it and found an index full of documents it could not read.
+ */
+export async function cacheReleaseBody(url: string, body: string): Promise<void> {
+  if (!body.trim()) return;
+
+  await writeCache({
+    url,
+    status: 200,
+    body,
+    contentType: 'text/markdown',
+    contentHash: sha256(body).slice(0, 32),
+    retrievedAt: new Date().toISOString(),
+    transport: 'api',
+  });
 }

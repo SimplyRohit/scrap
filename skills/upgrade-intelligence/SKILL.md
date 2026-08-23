@@ -11,6 +11,46 @@ repository**, and **what does this error mean for this package version**.
 Every finding carries the verbatim sentence it came from and a confidence score.
 Findings below 75% confidence are hypotheses, not facts.
 
+## Setup
+
+The `upgrade-intel` command must be on `PATH`, and it must find its credentials
+from whatever directory you are working in.
+
+```bash
+cd <this repository> && bun link      # puts `upgrade-intel` on PATH
+upgrade-intel stats                   # verify
+```
+
+`stats` prints a capability block. Every line should read `on`:
+
+```
+on   brightData        page fetching
+on   brightDataSerp    web search discovery
+on   github            5000 API calls/hour instead of 60
+on   embeddings        semantic search
+```
+
+Anything `off` means a missing key. Keys live in `~/.upgrade-intel/.env`, not in
+a project `.env.local` — `bun` reads `.env.local` from the working directory,
+which is the wrong directory for a globally installed CLI:
+
+```
+BRIGHTDATA_API_KEY=...
+BRIGHTDATA_SERP_ZONE=...     # the SERP zone name from the Bright Data dashboard
+GITHUB_TOKEN=...             # no scopes needed; public reads only
+VOYAGE_API_KEY=...           # semantic search; lexical-only without it
+```
+
+Real environment variables win over that file, so CI and a shell export behave
+the way they read.
+
+### Where the index lives
+
+`~/.upgrade-intel/` by default, shared by every repository — what is indexed is
+knowledge about *packages*, not about one project, so an error diagnosed in one
+repository is already answered in the next. A project overrides this by creating
+its own `.upgrade-intel/` directory, or by setting `UPGRADE_INTEL_DATA_DIR`.
+
 ## When upgrading a dependency
 
 ```bash
@@ -61,6 +101,11 @@ The response gives `diagnosis`, `likelyCause`, `fix[]`, `affectedVersions`,
 If `fixedVersions` is non-empty and the repository is below that version,
 upgrading is usually the correct fix rather than editing code.
 
+An empty `fix[]` is not a failure. Migration steps are withheld below 0.75
+confidence, so a well-evidenced 0.55 answer arrives as `likelyCause` and
+`evidence[]` with no steps. Read the cause, verify it against the repository,
+and write the change yourself — do not treat the empty array as "nothing known".
+
 ## After applying a fix
 
 Always report, whether it worked or not. A failed attempt is as useful as a
@@ -108,8 +153,16 @@ upgrade-intel index <package> --from <version>               # warm the index
 upgrade-intel graph <package> [--version <v>]                # what each version broke and what fixed it
 upgrade-intel backfill                                       # embed indexed knowledge for semantic search
 upgrade-intel prune                                          # list index entries the current rules reject
+upgrade-intel reindex [package]                              # re-extract cached documents under current rules
 upgrade-intel stats                                          # index size, capabilities
+upgrade-intel mcp                                            # serve the engine over MCP on stdio
 ```
+
+`reindex` re-reads what is already in the fetch cache and re-extracts it under
+today's rules. Use it after the extraction rules change; it costs no network and
+no quota. It prints a dry run by default. `--apply` writes, and `--prune-missing`
+also deletes what no longer reproduces — read the held list first, because a
+claim can go missing for reasons other than being wrong.
 
 `graph` is the fastest way to answer "which version fixes this" — it walks
 `ERROR ─FIXED_BY→ VERSION` rather than re-reading every finding. It labels
@@ -118,6 +171,16 @@ as a release of breakage.
 
 Add `--fail-on HIGH` to `migrate` or `repo` to exit `2` when risk reaches a
 threshold — useful for gating CI.
+
+## As an MCP server
+
+`upgrade-intel mcp` speaks JSON-RPC over stdio, exposing the same engine as six
+tools: `search_knowledge`, `analyze_error`, `research_upgrade`,
+`correlate_repository`, `package_graph`, and `report_fix`.
+
+Prefer this over shelling out when the harness supports MCP: the arguments are
+typed, and a tool failure comes back as a result rather than as a non-zero exit
+you have to parse.
 
 ## Interpreting confidence
 

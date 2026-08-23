@@ -7,6 +7,7 @@
  */
 
 import { fetchDocument, tryFetchDocument } from './fetcher';
+import { branchCandidates } from './github';
 import { compareStrings, parse, sortVersionsAscending } from '../semver';
 import type { Ecosystem } from '../knowledge';
 
@@ -137,6 +138,9 @@ export async function fetchPackageMetadata(
   ecosystem: Ecosystem,
   refresh = false,
 ): Promise<PackageMetadata> {
+  // The default branch is deliberately not resolved here. A metadata lookup runs
+  // on the index-first path too, and that path must cost one request. It is
+  // resolved by whoever is about to probe the repository — see `resolveSourcePlan`.
   return isPythonEcosystem(ecosystem)
     ? fetchPyPiMetadata(name, ecosystem, refresh)
     : fetchNpmMetadata(name, ecosystem, refresh);
@@ -186,12 +190,16 @@ export function resolveTargetVersion(
 }
 
 /** Probes conventional changelog locations in the repository. */
-export async function findChangelogUrl(githubSlug: string | undefined, refresh = false): Promise<string | undefined> {
+export async function findChangelogUrl(
+  githubSlug: string | undefined,
+  refresh = false,
+  branch?: string | null,
+): Promise<string | undefined> {
   if (!githubSlug) return undefined;
 
-  for (const branch of ['main', 'master']) {
+  for (const candidate of branchCandidates(branch)) {
     for (const file of ['CHANGELOG.md', 'CHANGELOG.rst', 'docs/CHANGELOG.md', 'HISTORY.md']) {
-      const url = `https://raw.githubusercontent.com/${githubSlug}/${branch}/${file}`;
+      const url = `https://raw.githubusercontent.com/${githubSlug}/${candidate}/${file}`;
       const found = await tryFetchDocument(url, { sourceType: 'official_changelog', refresh, transport: 'direct' });
       if (found) return url;
     }

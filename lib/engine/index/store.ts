@@ -22,7 +22,7 @@ import {
   type KnowledgeType,
 } from '../knowledge';
 import { satisfies } from '../semver';
-import { INDEX_FILE, ensureDataDirs } from '../paths';
+import { ensureDataDirs, indexFile } from '../paths';
 import { cosineSimilarity, getEmbedder } from './embeddings';
 
 export interface SearchQuery {
@@ -112,7 +112,7 @@ export class JsonKnowledgeStore implements KnowledgeStore {
   /** Serializes read-modify-write cycles so concurrent requests cannot lose entries. */
   private writeQueue: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly filePath: string = INDEX_FILE) {}
+  constructor(private readonly filePath: string = indexFile()) {}
 
   private async load(): Promise<IndexFile> {
     if (this.cache) return this.cache;
