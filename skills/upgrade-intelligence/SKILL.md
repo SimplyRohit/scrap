@@ -17,7 +17,7 @@ The `rift` command must be on `PATH`, and it must find its credentials
 from whatever directory you are working in.
 
 ```bash
-cd <this repository> && bun link      # puts `rift` on PATH
+npm i -g riftcli             # puts `rift` on PATH
 rift stats                   # verify
 ```
 
@@ -31,8 +31,8 @@ on   embeddings        semantic search
 ```
 
 Anything `off` means a missing key. Keys live in `~/.upgrade-intel/.env`, not in
-a project `.env.local` — `bun` reads `.env.local` from the working directory,
-which is the wrong directory for a globally installed CLI:
+a project `.env.local`. A globally installed `rift` runs from whatever directory
+you happen to be in, so a per-project env file is the wrong place to put them:
 
 ```
 BRIGHTDATA_API_KEY=...

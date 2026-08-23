@@ -27,7 +27,7 @@ export type ConsoleLine =
   | { kind: "exit"; text: string };
 
 export const CONSOLE_LINES: ConsoleLine[] = [
-  { kind: "prompt", text: "rift migrate next --from 13.4.19 --to 14.2.0" },
+  { kind: "prompt", text: "npx riftcli migrate next --from 13.4.19 --to 14.2.0" },
   { kind: "meta", label: "index", text: "no coverage for this window, researching" },
   { kind: "meta", label: "registry", text: "npm · resolved 14.2.0" },
   { kind: "meta", label: "sources", text: "6 planned · 6 read · 0 failed · 2 from cache" },
@@ -103,7 +103,7 @@ export const MODES = [
     index: "01",
     name: "Upgrade mode",
     lede: "Start from a manifest or a single package. Get back what changed, what breaks, and which of your files touch it.",
-    command: "rift repo . --fail-on HIGH --json",
+    command: "npx riftcli repo . --fail-on HIGH --json",
     points: [
       "package.json, requirements.txt, pyproject.toml",
       "Lockfile overlay for the versions actually installed",
@@ -116,7 +116,7 @@ export const MODES = [
     name: "Error mode",
     lede: "Paste the stack trace. The error is fingerprinted, matched against indexed knowledge, and researched only if that is not enough.",
     command:
-      'rift error --package prisma --version 6.0.0 \\\n  --error "PrismaClientInitializationError: ..."',
+      'npx riftcli error --package prisma --version 6.0.0 \\\n  --error "PrismaClientInitializationError: ..."',
     points: [
       "Application frames stripped before fingerprinting",
       "Correlated against breaking changes for that exact version",
@@ -244,7 +244,7 @@ export const SURFACES = [
       "backfill · prune · reindex · report",
       "mcp · stats · --fail-on gates the build",
     ],
-    code: "rift repo . --fail-on HIGH",
+    code: "npx riftcli repo . --fail-on HIGH",
   },
   {
     index: "02",
@@ -262,7 +262,7 @@ export const SURFACES = [
     summary:
       "A skill for Claude Code and a harness-agnostic AGENT.md, so an agent can research a package, apply the migration, then report whether it actually worked.",
     points: ["skills/upgrade-intelligence", "skills/generic/AGENT.md", "Write-back on verified fixes"],
-    code: "rift report --package next --summary ...",
+    code: "npx riftcli report --package next --summary ...",
   },
 ] as const;
 
@@ -327,7 +327,7 @@ export const FAQS = [
   },
   {
     q: "Can I gate CI on it?",
-    a: "That is what --fail-on is for. rift repo . --fail-on HIGH exits 2 the moment a dependency reaches that risk level, and --json gives the build something to attach to the PR.",
+    a: "That is what --fail-on is for. npx riftcli repo . --fail-on HIGH exits 2 the moment a dependency reaches that risk level, and --json gives the build something to attach to the PR.",
   },
 ] as const;
 

@@ -17,8 +17,9 @@ export interface ManifestParseResult {
   totalCount: number;
 }
 
-/** How a source was retrieved. */
-export type SourceTransport = 'brightdata' | 'direct' | 'cache' | 'api';
+/** How a source was retrieved. `relay` is an unlocker fetch paid for by the
+ * deployed site rather than a local key. */
+export type SourceTransport = 'brightdata' | 'direct' | 'cache' | 'api' | 'relay';
 
 export interface ResearchedSource {
   /** Version this source documents, when the engine could anchor one. */

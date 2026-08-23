@@ -11,6 +11,7 @@ import * as cheerio from 'cheerio';
 import { tryFetchDocument } from './fetcher';
 import { classifySource } from './sources';
 import type { SourceType } from '../knowledge';
+import { relayConfigured, relayPost } from '../relay';
 
 export interface SearchResult {
   url: string;
@@ -32,7 +33,7 @@ export function serpConfigured(): boolean {
  * changelog) must still produce a result without it.
  */
 export async function searchWeb(query: string, limit = 10): Promise<SearchResult[]> {
-  if (!serpConfigured()) return [];
+  if (!serpConfigured()) return relayConfigured() ? searchViaRelay(query, limit) : [];
 
   const target = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=${limit}&brd_json=1`;
 
@@ -54,6 +55,35 @@ export async function searchWeb(query: string, limit = 10): Promise<SearchResult
     if (!response.ok) return [];
     const body = await response.text();
     return parseSerp(body, limit);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Discovery through the deployed site's SERP zone.
+ *
+ * The relay returns already-parsed results, so `sourceType` is reclassified
+ * here rather than trusted: authority tier decides how much a claim is worth,
+ * and that judgement belongs to the machine doing the extracting.
+ */
+async function searchViaRelay(query: string, limit: number): Promise<SearchResult[]> {
+  try {
+    const body = await relayPost<{ results?: Array<{ url?: string; title?: string; snippet?: string }> }>(
+      '/api/relay/search',
+      { query, limit },
+    );
+
+    return (body.results ?? [])
+      .filter((item): item is { url: string; title?: string; snippet?: string } => Boolean(item.url))
+      .slice(0, limit)
+      .map((item, index) => ({
+        url: item.url,
+        title: item.title ?? '',
+        snippet: item.snippet ?? '',
+        sourceType: classifySource(item.url),
+        rank: index,
+      }));
   } catch {
     return [];
   }

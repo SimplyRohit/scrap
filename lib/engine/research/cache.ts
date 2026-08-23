@@ -29,8 +29,13 @@ export interface CacheEntry {
    * it is cited as — release notes are read from the GitHub releases listing
    * and cited as the release page. Storing it under the cited URL is what makes
    * the document re-readable later; calling it `direct` would be a lie.
+   *
+   * `relay` is an unlocker fetch that spent the deployed site's key instead of a
+   * local one. It is kept distinct from `brightdata` for the same reason: the
+   * body is identical, but who paid for it is not, and a run that leaned on the
+   * relay should be able to say so.
    */
-  transport: 'brightdata' | 'direct' | 'cache' | 'api';
+  transport: 'brightdata' | 'direct' | 'cache' | 'api' | 'relay';
 }
 
 /**

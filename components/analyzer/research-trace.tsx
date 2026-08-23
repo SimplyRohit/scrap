@@ -14,6 +14,9 @@ const TRANSPORT: Record<SourceTransport, { label: string; tone: string }> = {
   // Release bodies arrive through the GitHub API but are cited as the release
   // page, so the trace has to be able to say which of the two it actually read.
   api: { label: "API", tone: "text-muted-foreground" },
+  // Same unlocker, someone else's key. Worth distinguishing: a run that leaned
+  // on the relay depends on this deployment staying up and in quota.
+  relay: { label: "Relay", tone: "text-high" },
 };
 
 export function ResearchTrace({ analysis }: { analysis: FullBlastRadiusAnalysis | null }) {

@@ -9,6 +9,7 @@
 
 import { hashBody, isFresh, readCache, revalidationHeaders, writeCache, type CacheEntry } from './cache';
 import type { SourceType } from '../knowledge';
+import { relayConfigured, relayPost } from '../relay';
 
 const BRIGHTDATA_ENDPOINT = 'https://api.brightdata.com/request';
 const DEFAULT_ZONE = 'web_unlocker1';
@@ -22,7 +23,7 @@ const DIRECT_HOSTS = new Set([
   'unpkg.com',
 ]);
 
-export type Transport = 'auto' | 'direct' | 'brightdata';
+export type Transport = 'auto' | 'direct' | 'brightdata' | 'relay';
 
 export interface FetchOptions {
   sourceType: SourceType;
@@ -52,13 +53,24 @@ export function brightDataConfigured(): boolean {
   return Boolean(process.env.BRIGHTDATA_API_KEY);
 }
 
-function chooseTransport(url: string, requested: Transport): 'direct' | 'brightdata' {
-  if (requested === 'direct') return 'direct';
-  if (requested === 'brightdata') return 'brightdata';
+type Route = 'direct' | 'brightdata' | 'relay';
 
-  if (!brightDataConfigured()) return 'direct';
+/**
+ * Which route to try first.
+ *
+ * An unlocker is only worth spending on a host that might block us, so the
+ * JSON APIs stay direct either way. For everything else a local Bright Data key
+ * is preferred over the relay: it is the caller's own quota, and it does not
+ * tell a third party which packages they are researching.
+ */
+function chooseTransport(url: string, requested: Transport): Route {
+  if (requested !== 'auto') return requested;
+
+  const unlocker: Route | null = brightDataConfigured() ? 'brightdata' : relayConfigured() ? 'relay' : null;
+  if (!unlocker) return 'direct';
+
   try {
-    return DIRECT_HOSTS.has(new URL(url).hostname) ? 'direct' : 'brightdata';
+    return DIRECT_HOSTS.has(new URL(url).hostname) ? 'direct' : unlocker;
   } catch {
     return 'direct';
   }
@@ -107,6 +119,35 @@ async function fetchViaBrightData(
   return { status: 200, body, headers: response.headers };
 }
 
+interface RelayFetchResponse {
+  status: number;
+  body: string;
+  contentType?: string;
+  etag?: string;
+  lastModified?: string;
+}
+
+/**
+ * Fetches through the deployed site, which holds the unlocker key.
+ *
+ * The relay answers with plain fields rather than a proxied `Response`, so the
+ * caching headers are rebuilt into a `Headers` here and the rest of this module
+ * cannot tell which route produced the body.
+ */
+async function fetchViaRelay(
+  url: string,
+  timeoutMs: number,
+): Promise<{ status: number; body: string; headers: Headers }> {
+  const result = await relayPost<RelayFetchResponse>('/api/relay/fetch', { url }, timeoutMs);
+
+  const headers = new Headers();
+  if (result.contentType) headers.set('content-type', result.contentType);
+  if (result.etag) headers.set('etag', result.etag);
+  if (result.lastModified) headers.set('last-modified', result.lastModified);
+
+  return { status: result.status, body: result.body ?? '', headers };
+}
+
 /**
  * Statuses that say "this route did not work", rather than "this page is not
  * there". A 404 is an answer; a 403 or a 502 is an obstacle.
@@ -124,12 +165,17 @@ function isWorthAnotherRoute(status: number): boolean {
  * whole reason the unlocker transport exists. An explicit `transport` is
  * honoured exactly, because a caller that names one is not guessing.
  */
-function escalation(chosen: 'direct' | 'brightdata', requested: Transport): Array<'direct' | 'brightdata'> {
+function escalation(chosen: Route, requested: Transport): Route[] {
   if (requested !== 'auto') return [chosen];
   if (chosen === 'brightdata') return ['brightdata', 'direct'];
 
-  // A direct choice under `auto` means either no unlocker is configured, or the
-  // host is one that rejects proxies. Neither has anywhere to escalate to.
+  // The relay is somebody else's deployment: it can be down, rate-limited, or
+  // not deployed at all. Falling back to direct means a keyless caller is never
+  // worse off than they were before a relay existed.
+  if (chosen === 'relay') return ['relay', 'direct'];
+
+  // A direct choice under `auto` means no unlocker of either kind is available,
+  // or the host is one that rejects proxies. Neither has anywhere to escalate to.
   return ['direct'];
 }
 
@@ -161,13 +207,16 @@ export async function fetchDocument(url: string, options: FetchOptions): Promise
   const chosen = chooseTransport(url, transport);
   const headers = refresh ? {} : revalidationHeaders(cached);
 
-  const attempt = async (via: 'direct' | 'brightdata') =>
-    via === 'brightdata' ? fetchViaBrightData(url, timeoutMs) : fetchDirect(url, headers, timeoutMs);
+  const attempt = async (via: Route) => {
+    if (via === 'brightdata') return fetchViaBrightData(url, timeoutMs);
+    if (via === 'relay') return fetchViaRelay(url, timeoutMs);
+    return fetchDirect(url, headers, timeoutMs);
+  };
 
   const routes = escalation(chosen, transport);
 
   let result: { status: number; body: string; headers: Headers } | null = null;
-  let usedTransport: 'direct' | 'brightdata' = chosen;
+  let usedTransport: Route = chosen;
   let lastError: unknown = new FetchError(`No transport available for ${url}`, url);
 
   outer: for (const [index, via] of routes.entries()) {
