@@ -384,6 +384,23 @@ describe('backfill', () => {
     expect(result.remaining).toBe(6);
   });
 
+  test('embeds only the ids it was given', async () => {
+    // Used right after indexing: the run embeds what it just wrote rather than
+    // sweeping the whole index, so a first-contact answer is hybrid, not lexical.
+    const store = await freshStore();
+    await store.upsert([
+      knowledge({ id: 'k_new', fingerprint: 'fp_new' }),
+      knowledge({ id: 'k_old', fingerprint: 'fp_old' }),
+    ]);
+    registerEmbedder(fakeEmbedder());
+
+    const result = await backfillEmbeddings({ store, ids: ['k_new'] });
+
+    expect(result.embedded).toBe(1);
+    expect((await store.get('k_new'))?.embedding).not.toBeNull();
+    expect((await store.get('k_old'))?.embedding).toBeNull();
+  });
+
   test('needsEmbedding treats an unlabelled vector as stale', () => {
     expect(needsEmbedding(knowledge({ embedding: [1, 2, 3] }), 'fake:v1')).toBe(true);
     expect(needsEmbedding(knowledge({ embedding: [1, 2, 3], embeddingModel: 'fake:v1' }), 'fake:v1')).toBe(false);

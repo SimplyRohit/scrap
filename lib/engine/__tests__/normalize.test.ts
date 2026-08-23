@@ -67,3 +67,35 @@ describe('normalizeDocument', () => {
     expect(document.sections[0].heading).toBe('Notes');
   });
 });
+
+describe('nested bullets', () => {
+  test('a nested bullet qualifies its parent instead of becoming a peer claim', () => {
+    // Real chalk 5.0.0 release notes. Flattened, "you need TypeScript 4.7"
+    // became a breaking change in its own right and outranked the change it was
+    // qualifying when a diagnosis went looking for a cause.
+    const { sections } = parseMarkdown(`### Breaking
+
+- **This package is now pure ESM.**
+\t- If you use TypeScript, you need to use TypeScript 4.7 or later.
+  - If you use a bundler, make sure it supports ESM.
+- Require Node.js 12.20
+`);
+
+    const breaking = sections.find((section) => section.heading === 'Breaking');
+    expect(breaking?.bullets).toHaveLength(2);
+    expect(breaking?.bullets[0]).toContain('pure ESM');
+    expect(breaking?.bullets[0]).toContain('TypeScript 4.7');
+    expect(breaking?.bullets[0]).toContain('supports ESM');
+    expect(breaking?.bullets[1]).toBe('Require Node.js 12.20');
+  });
+
+  test('a flat list is still a list', () => {
+    const { sections } = parseMarkdown(`### Removed
+
+- \`foo()\`
+- \`bar()\`
+`);
+
+    expect(sections.find((section) => section.heading === 'Removed')?.bullets).toEqual(['`foo()`', '`bar()`']);
+  });
+});

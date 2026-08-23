@@ -237,8 +237,13 @@ export const SURFACES = [
     name: "CLI",
     status: "Shipping",
     summary:
-      "Nine commands, every one of them with --json, because the first consumer of this output is a coding agent and the second is CI.",
-    points: ["package · migrate · error · repo", "search · index · sources", "--fail-on gates the build"],
+      "Fourteen commands, every one of them with --json, because the first consumer of this output is a coding agent and the second is CI.",
+    points: [
+      "package · migrate · error · repo",
+      "search · index · graph · sources",
+      "backfill · prune · reindex · report",
+      "mcp · stats · --fail-on gates the build",
+    ],
     code: "rift repo . --fail-on HIGH",
   },
   {

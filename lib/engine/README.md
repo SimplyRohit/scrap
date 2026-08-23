@@ -39,6 +39,7 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 | `index/voyage.ts` | Voyage AI embedder: the only file that names a vendor |
 | `index/backfill.ts` | Adds vectors to indexed knowledge, resumable and idempotent |
 | `index/graph.ts` | Knowledge graph projected from the index (section 10) |
+| `index/reindex.ts` | Re-extracts cached documents under current rules, offline |
 | `feedback.ts` | Verified-fix write-back, reinforcement and refutation (section 20) |
 | `pipeline.ts` | Upgrade research orchestration |
 | `errorPipeline.ts` | Error resolution orchestration (sections 8, 19) |
@@ -56,6 +57,7 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 | `POST /api/search` | Hybrid retrieval over the index. Never scrapes |
 | `GET  /api/index` | Index statistics and capability report |
 | `POST /api/index` | Index a package on demand, or `{"action":"backfill"}` to embed |
+| `rift mcp` | The same engine over MCP on stdio (section 18) |
 | `GET  /api/graph` | Package knowledge graph; `?format=tree` for the section 10 diagram |
 | `POST /api/errors/analyze` | Diagnose an error against the index, research if insufficient |
 | `POST /api/repositories/analyze` | Read a repo's manifest, research it, correlate findings to files |
@@ -65,7 +67,7 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 ## CLI
 
 ```bash
-bun run cli -- <command>          # or ./skills/upgrade-intelligence/scripts/upgrade-intel
+bun run cli -- <command>          # or ./skills/upgrade-intelligence/scripts/rift
 ```
 
 Commands follow gen.md section 25: `package`, `migrate`, `error`, `repo`,
@@ -98,9 +100,10 @@ bun test lib/engine     # or: bun run test
 bun run typecheck
 ```
 
-219 tests. The pure units — semver, error fingerprinting, document normalization,
+259 tests. The pure units — semver, error fingerprinting, document normalization,
 extraction, confidence, dedupe, the store, manifest parsing, repository
-correlation, embeddings, the knowledge graph, and feedback — are tested directly.
+correlation, embeddings, the knowledge graph, error resolution, and feedback — are tested
+directly.
 
 `embeddings.test.ts` injects the HTTP call into the Voyage client and registers a
 deterministic fake embedder, so the suite never needs a key and never touches the
@@ -165,11 +168,24 @@ matching prose in page metadata.
   need, and there is none: the relations it names are already implied by fields
   the objects carry. The cost is that a relation nothing asserts does not exist —
   the graph knows what was extracted, not what is true.
+- **Symptom and cause are retrieved separately.** An error message and the
+  release note that explains it share almost no vocabulary, so ranked together
+  the issue quoting the error always wins and the cause falls below the cut
+  (measured on chalk 5.6.2: the release note ranked 15th of 23). `resolveError`
+  runs a second, type-filtered query for breaking changes in the version window
+  and prefers an authoritative cause over a community symptom — ordered by
+  whether the change names the symbols the error actually named. A change about
+  *other* APIs ranks below a general one, because "this package is now pure ESM"
+  explains a missing member and "we removed `.hsl()`" does not.
 - **Extraction rules tighten over time; the index does not follow.** Entries
-  written before a rule was added stay until they are removed. `upgrade-intel
-  prune` re-applies the housekeeping filter to what is already stored and is dry
-  by default. It is the one rule cheap enough to re-run without the source
-  document; everything else needs `--refresh` re-research.
+  written before a rule was added stay until something rewrites them.
+  `rift prune` re-applies the housekeeping filter by title alone;
+  `rift reindex` re-extracts the documents still in the fetch cache, so
+  reclassification costs nothing and needs no network. Neither is a full replay:
+  reindex adds and reclassifies but will not delete without `--prune-missing`,
+  because the claim budget alone can make a large changelog yield fewer claims
+  the second time, and deleting on that basis loses real knowledge to an
+  artefact. Documents no longer cached need `--refresh` re-research.
 - **Extraction is deterministic.** It classifies by heading, conventional-commit
   prefix, and prose pattern. It will not summarise or infer a migration that the
   source does not state. `refineWithModel` in `extract.ts` is the seam for an LLM

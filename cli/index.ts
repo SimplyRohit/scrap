@@ -1,14 +1,18 @@
 #!/usr/bin/env bun
 /**
- * upgrade-intel — the CLI from gen.md section 25.
+ * rift — the CLI from gen.md section 25.
  *
  * Calls the engine directly rather than the HTTP API, so it works with no server
  * running. Every command supports `--json` because the primary consumer is a
  * coding agent (section 19), and `--fail-on` so it can gate CI.
  */
 
-import { readFile } from 'node:fs/promises';
+import { writeStdout } from '../lib/stdout';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { boolFlag, numberFlag, parseArgs, stringFlag, type ParsedArgs } from './args';
 import {
@@ -30,9 +34,10 @@ import {
 import { isRepositoryHousekeeping } from '../lib/engine/analysis/extract';
 import { applicableKnowledge, correlateRepository } from '../lib/engine/analysis/repository';
 import { initializeEngine } from '../lib/engine/bootstrap';
-import { isBreaking, type RiskLevel } from '../lib/engine/analysis/versionDiff';
+import { isBreakingInWindow, type RiskLevel } from '../lib/engine/analysis/versionDiff';
 import { recordFixOutcome } from '../lib/engine/feedback';
 import { backfillEmbeddings } from '../lib/engine/index/backfill';
+import { reindexFromCache } from '../lib/engine/index/reindex';
 import { embedQuery } from '../lib/engine/index/embeddings';
 import { buildKnowledgeGraph, subgraph } from '../lib/engine/index/graph';
 import { getStore } from '../lib/engine/index/store';
@@ -49,14 +54,14 @@ import {
 import { researchManifest, researchPackageUpgrade, type PackageResearchResult } from '../lib/engine/pipeline';
 import { brightDataConfigured } from '../lib/engine/research/fetcher';
 import { tryFetchPackageMetadata } from '../lib/engine/research/registry';
-import { planUpgradeSources } from '../lib/engine/research/sources';
+import { resolveSourcePlan } from '../lib/engine/research/sources';
 import { serpConfigured } from '../lib/engine/research/search';
 
 const USAGE = `
-${bold('upgrade-intel')} — package migration and error intelligence
+${bold('rift')} — package migration and error intelligence
 
 ${bold('Usage')}
-  upgrade-intel <command> [options]
+  rift <command> [options]
 
 ${bold('Commands')}
   package <name> --from <version>          Research the latest upgrade for a package
@@ -68,6 +73,9 @@ ${bold('Commands')}
   graph <name> [--version <v>]             Show the knowledge graph for a package
   backfill                                 Embed indexed knowledge (needs VOYAGE_API_KEY)
   prune                                    Drop indexed entries the current rules reject
+  reindex [name]                           Re-extract cached documents under current rules
+  mcp                                      Serve the engine over MCP on stdio
+  install-skill                            Install the agent skill into ~/.claude/skills
   sources <name>                           Show the sources that would be researched
   report --package <p> --summary <s>       Record a fix outcome (validation feedback)
   stats                                    Index statistics and engine capabilities
@@ -80,9 +88,9 @@ ${bold('Common options')}
   --fail-on <level>      Exit 2 if risk reaches this level (LOW|MEDIUM|HIGH|CRITICAL)
 
 ${bold('Examples')}
-  upgrade-intel migrate prisma --from 5.22.0 --to 6.0.0
-  upgrade-intel error --package prisma --version 6.0.0 --error "PrismaClientInitializationError: ..."
-  upgrade-intel repo . --fail-on HIGH --json
+  rift migrate prisma --from 5.22.0 --to 6.0.0
+  rift error --package prisma --version 6.0.0 --error "PrismaClientInitializationError: ..."
+  rift repo . --fail-on HIGH --json
 `;
 
 const RISK_ORDER: RiskLevel[] = ['SAFE', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -99,7 +107,7 @@ function fail(message: string): never {
 }
 
 function emitJson(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  writeStdout(`${JSON.stringify(value, null, 2)}\n`);
 }
 
 function researchOptions(args: ParsedArgs) {
@@ -110,8 +118,10 @@ function researchOptions(args: ParsedArgs) {
 }
 
 function printKnowledge(knowledge: KnowledgeObject[], limit = 20): void {
-  const breaking = knowledge.filter(isBreaking).sort((a, b) => b.confidence - a.confidence);
-  const rest = knowledge.filter((item) => !isBreaking(item));
+  // Out-of-window claims fall into `rest`, so they are still counted, never shown
+  // as work this upgrade requires.
+  const breaking = knowledge.filter(isBreakingInWindow).sort((a, b) => b.confidence - a.confidence);
+  const rest = knowledge.filter((item) => !isBreakingInWindow(item));
 
   if (breaking.length === 0) {
     process.stdout.write(dim('  No breaking changes were extracted from the sources read.\n'));
@@ -176,7 +186,7 @@ function printResearchResult(result: PackageResearchResult, args: ParsedArgs): v
 
 async function commandPackage(args: ParsedArgs): Promise<number> {
   const name = args.positional[0];
-  if (!name) fail('usage: upgrade-intel package <name> --from <version>');
+  if (!name) fail('usage: rift package <name> --from <version>');
 
   const from = stringFlag(args.flags, 'from', 'current');
   if (!from) fail('`--from <version>` is required — the engine will not guess your current version');
@@ -331,7 +341,7 @@ async function commandRepo(args: ParsedArgs): Promise<number> {
 
   for (const result of [...research.results].sort((a, b) => b.risk.score - a.risk.score)) {
     const impact = impacts[result.package];
-    const breaking = result.knowledge.filter(isBreaking);
+    const breaking = result.knowledge.filter(isBreakingInWindow);
     const applicable = impact ? applicableKnowledge(breaking, impact).length : breaking.length;
 
     rows.push([
@@ -367,11 +377,7 @@ async function commandSearch(args: ParsedArgs): Promise<number> {
   const query = args.positional.join(' ');
   const packageName = stringFlag(args.flags, 'package', 'p');
 
-  if (!query && !packageName) fail('usage: upgrade-intel search <query> [--package <name>]');
-
-  // Semantic scoring when a provider is configured; lexical otherwise. Both
-  // paths return results, so this never gates the command.
-  initializeEngine();
+  if (!query && !packageName) fail('usage: rift search <query> [--package <name>]');
 
   const results = await getStore().search({
     text: query || undefined,
@@ -387,7 +393,7 @@ async function commandSearch(args: ParsedArgs): Promise<number> {
   }
 
   if (results.length === 0) {
-    process.stdout.write(dim('No matching knowledge. Run `upgrade-intel index <name> --from <version>` first.\n'));
+    process.stdout.write(dim('No matching knowledge. Run `rift index <name> --from <version>` first.\n'));
     return 0;
   }
 
@@ -410,7 +416,7 @@ async function commandIndex(args: ParsedArgs): Promise<number> {
   const name = args.positional[0];
   const from = stringFlag(args.flags, 'from');
 
-  if (!name) fail('usage: upgrade-intel index <name> --from <version>');
+  if (!name) fail('usage: rift index <name> --from <version>');
   if (!from) fail('`--from <version>` is required — indexing needs a window to research');
 
   const result = await researchPackageUpgrade(
@@ -440,14 +446,14 @@ async function commandIndex(args: ParsedArgs): Promise<number> {
 
 async function commandSources(args: ParsedArgs): Promise<number> {
   const name = args.positional[0];
-  if (!name) fail('usage: upgrade-intel sources <name>');
+  if (!name) fail('usage: rift sources <name>');
 
   const ecosystem = (stringFlag(args.flags, 'ecosystem') as Ecosystem) ?? detectEcosystem(name, 'nodejs');
   const metadata = await tryFetchPackageMetadata(name, ecosystem);
   if (!metadata) fail(`registry lookup failed for ${name}`);
 
   const target = stringFlag(args.flags, 'to') ?? metadata.latestVersion ?? 'latest';
-  const plan = planUpgradeSources(metadata, target);
+  const plan = await resolveSourcePlan(metadata, target);
 
   if (boolFlag(args.flags, 'json')) {
     emitJson({ metadata, plan });
@@ -488,6 +494,10 @@ async function commandReport(args: ParsedArgs): Promise<number> {
     package: packageName,
     version: stringFlag(args.flags, 'version', 'v'),
     error: stringFlag(args.flags, 'error', 'e'),
+    // Without the stack, the report fingerprints to something other than the
+    // resolution it came from, and the verified fix can never be retrieved by
+    // the error that produced it.
+    stackTrace: stringFlag(args.flags, 'stack'),
     summary,
     fix: [],
     derivedFrom: derived ? derived.split(',').map((id) => id.trim()) : undefined,
@@ -545,7 +555,7 @@ async function commandStats(args: ParsedArgs): Promise<number> {
     process.stdout.write(`  ${dim('retrieval is lexical only — set VOYAGE_API_KEY for semantic search')}\n`);
   } else if (stats.withEmbeddings < stats.total) {
     process.stdout.write(
-      `  ${dim(`${stats.total - stats.withEmbeddings} object(s) have no vector — run \`upgrade-intel backfill\``)}\n`,
+      `  ${dim(`${stats.total - stats.withEmbeddings} object(s) have no vector — run \`rift backfill\``)}\n`,
     );
   }
 
@@ -554,14 +564,14 @@ async function commandStats(args: ParsedArgs): Promise<number> {
 
 async function commandGraph(args: ParsedArgs): Promise<number> {
   const packageName = args.positional[0];
-  if (!packageName) fail('usage: upgrade-intel graph <package> [--version <version>]');
+  if (!packageName) fail('usage: rift graph <package> [--version <version>]');
 
   const version = stringFlag(args.flags, 'version', 'v');
   const knowledge = (await getStore().all()).filter((item) => item.package === packageName);
 
   if (knowledge.length === 0) {
     process.stdout.write(
-      dim(`Nothing indexed for ${packageName}. Run \`upgrade-intel index ${packageName} --from <version>\` first.\n`),
+      dim(`Nothing indexed for ${packageName}. Run \`rift index ${packageName} --from <version>\` first.\n`),
     );
     return 0;
   }
@@ -644,6 +654,105 @@ async function commandPrune(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+/**
+ * Rebuilds the index from the documents already in the fetch cache.
+ *
+ * Reclassification needs the original document, because a claim's type depends
+ * on the heading it sat under. The documents are cached, so this costs nothing
+ * and needs no network — unlike re-researching, which re-scrapes every source.
+ */
+async function commandReindex(args: ParsedArgs): Promise<number> {
+  const dryRun = !boolFlag(args.flags, 'apply');
+  const result = await reindexFromCache({
+    package: args.positional[0],
+    dryRun,
+    pruneMissing: boolFlag(args.flags, 'prune-missing'),
+  });
+
+  if (boolFlag(args.flags, 'json')) {
+    emitJson({ applied: !dryRun, ...result });
+    return 0;
+  }
+
+  process.stdout.write(
+    `${result.documents} cached document(s) re-extracted, ${result.missing} no longer cached\n`,
+  );
+  process.stdout.write(`${result.extracted} knowledge object(s) under current rules\n`);
+
+  for (const change of result.reclassified.slice(0, 20)) {
+    process.stdout.write(`  ${yellow('retype')} ${change}\n`);
+  }
+  for (const gone of result.removed.slice(0, 20)) {
+    process.stdout.write(`  ${dim(result.removalsHeld ? 'kept' : 'drop')}   ${gone}\n`);
+  }
+
+  if (result.removalsHeld) {
+    process.stdout.write(
+      `\n${yellow('held')} ${result.removed.length} object(s) were not reproduced but were kept.\n` +
+        `${dim('Re-extraction is not a guaranteed replay — the claim budget alone can explain this.')}\n` +
+        `${dim('Review the list, then pass --prune-missing if the removals are right.')}\n`,
+    );
+  }
+
+  if (dryRun && (result.removed.length > 0 || result.reclassified.length > 0)) {
+    process.stdout.write(`\nNothing was written. Re-run with --apply.\n`);
+  }
+
+  // A document the index references but the cache no longer holds cannot be
+  // re-extracted here; only re-researching that package will correct it.
+  if (result.missing > 0) {
+    process.stdout.write(
+      `${dim(`${result.missing} document(s) are no longer cached — re-run research with --refresh to correct those`)}\n`,
+    );
+  }
+
+  return 0;
+}
+
+/**
+ * Serves the engine over MCP (gen.md section 18).
+ *
+ * stdout belongs to the protocol from here on, so nothing else may print to it.
+ */
+async function commandMcp(): Promise<number> {
+  const { runStdioServer } = await import('../lib/mcp/server');
+  await runStdioServer();
+  return 0;
+}
+
+/**
+ * Copies the agent skill into `~/.claude/skills/`, where Claude Code looks.
+ *
+ * A published package can put the markdown on someone's disk, but nothing makes
+ * an agent read it from inside `node_modules`. Without this step "install rift"
+ * gives you a CLI that agents never learn to reach for, which is the whole
+ * point of shipping the skill alongside it.
+ */
+async function commandInstallSkill(args: ParsedArgs): Promise<number> {
+  // Resolves inside the published bundle and inside a git checkout alike.
+  const source = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'upgrade-intelligence', 'SKILL.md');
+  const target = path.join(homedir(), '.claude', 'skills', 'rift', 'SKILL.md');
+
+  let markdown: string;
+  try {
+    markdown = await readFile(source, 'utf8');
+  } catch {
+    return fail(`Could not read the skill from ${source}`);
+  }
+
+  if (existsSync(target) && !boolFlag(args.flags, 'force')) {
+    process.stdout.write(dim(`  ${target} already exists — pass --force to overwrite\n`));
+    return 0;
+  }
+
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, markdown, 'utf8');
+
+  process.stdout.write(`${green('installed')} ${target}\n`);
+  process.stdout.write(dim('  Restart Claude Code, then ask it to upgrade a package.\n'));
+  return 0;
+}
+
 const COMMANDS: Record<string, (args: ParsedArgs) => Promise<number>> = {
   package: commandPackage,
   migrate: commandPackage,
@@ -654,12 +763,19 @@ const COMMANDS: Record<string, (args: ParsedArgs) => Promise<number>> = {
   graph: commandGraph,
   backfill: commandBackfill,
   prune: commandPrune,
+  reindex: commandReindex,
+  mcp: commandMcp,
   sources: commandSources,
   report: commandReport,
   stats: commandStats,
+  'install-skill': commandInstallSkill,
 };
 
 export async function run(argv: string[]): Promise<number> {
+  // Once, at the entry point. Doing it per command meant the error path — the
+  // one that most needs semantic retrieval — silently ran lexical-only.
+  initializeEngine();
+
   const args = parseArgs(argv);
 
   if (!args.command || boolFlag(args.flags, 'help', 'h')) {
@@ -676,13 +792,30 @@ export async function run(argv: string[]): Promise<number> {
   return handler(args);
 }
 
+/**
+ * `process.exit` discards whatever stdout has not yet handed to the OS. A pipe
+ * takes 64 KiB before it blocks, so `--json | jq` silently truncated every
+ * report bigger than that — the file redirect was fine, which is why it looked
+ * like a jq problem. Wait for the drain, then exit.
+ */
+async function flushStdout(): Promise<void> {
+  if (process.stdout.writableLength === 0) return;
+  await new Promise<void>((resolve) => {
+    process.stdout.write('', () => resolve());
+  });
+}
+
 // `import.meta.main` is true only when executed directly, so the module stays
 // importable from tests without running the CLI.
 if (import.meta.main) {
   run(process.argv.slice(2))
-    .then((code) => process.exit(code))
-    .catch((error: unknown) => {
+    .then(async (code) => {
+      await flushStdout();
+      process.exit(code);
+    })
+    .catch(async (error: unknown) => {
       process.stderr.write(`${red('error')} ${error instanceof Error ? error.message : String(error)}\n`);
+      await flushStdout();
       process.exit(1);
     });
 }

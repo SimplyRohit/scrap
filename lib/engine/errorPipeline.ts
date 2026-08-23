@@ -16,6 +16,7 @@ import { extractKnowledge } from './analysis/extract';
 import { fingerprintError, retrievalText, type FingerprintInput } from './analysis/errorFingerprint';
 import { normalizeDocument } from './analysis/normalize';
 import { shortHash } from './hash';
+import { backfillEmbeddings } from './index/backfill';
 import { embedQuery } from './index/embeddings';
 import { getStore, type KnowledgeStore, type ScoredKnowledge } from './index/store';
 import { detectEcosystem } from './ingestion/manifest';
@@ -25,14 +26,17 @@ import {
   type Ecosystem,
   type ErrorFingerprint,
   type KnowledgeObject,
+  type KnowledgeType,
   type MigrationStep,
+  type SourceType,
 } from './knowledge';
+import { cacheReleaseBody } from './research/cache';
 import { fetchDocument } from './research/fetcher';
-import { searchIssues, type GitHubIssue } from './research/github';
+import { releaseForTag, searchIssues, type GitHubIssue } from './research/github';
 import { tryFetchPackageMetadata, type PackageMetadata } from './research/registry';
 import { buildErrorQueries, searchWeb } from './research/search';
 import { classifySource, docsDomain, domainOf } from './research/sources';
-import { satisfies } from './semver';
+import { parse, satisfies } from './semver';
 
 export interface ResolveErrorInput extends FingerprintInput {
   ecosystem?: Ecosystem;
@@ -196,6 +200,49 @@ async function researchError(
     }
   }
 
+  // Release notes for the failing version, and for the release that opened its
+  // major. Issues describe the symptom; the major-boundary release is where the
+  // maintainer states the cause — chalk 5.0.0 says "this package is now pure
+  // ESM", which is the whole answer to "chalk.green is not a function". This
+  // path needs no web search, so it is the one authoritative source still
+  // reachable when SERP is unconfigured.
+  if (metadata?.githubSlug && fingerprint.packageVersion) {
+    const parsed = parse(fingerprint.packageVersion);
+    const versions = [...new Set([fingerprint.packageVersion, parsed ? `${parsed.major}.0.0` : null])];
+
+    for (const version of versions) {
+      if (!version) continue;
+
+      const release = await releaseForTag(metadata.githubSlug, version, options.refresh);
+      if (!release?.body) continue;
+
+      const title = release.name || `${fingerprint.package} ${version}`;
+      await cacheReleaseBody(release.htmlUrl, release.body);
+      const normalized = normalizeDocument(release.body, 'text/markdown', title);
+      found.push(
+        ...extractKnowledge(normalized, {
+          package: fingerprint.package,
+          ecosystem,
+          documentVersion: release.version || version,
+          toVersion: release.version || version,
+          maxClaims: 25,
+          source: {
+            url: release.htmlUrl,
+            // Cited as the release page, read from the API.
+            retrievalUrl: `https://api.github.com/repos/${metadata.githubSlug}/releases/tags/${release.tagName}`,
+            domain: 'github.com',
+            sourceType: 'official_release',
+            trustScore: SOURCE_TRUST.official_release,
+            retrievedAt: new Date().toISOString(),
+            contentHash: shortHash(release.body, 20),
+            title,
+            publishedAt: release.publishedAt,
+          },
+        }),
+      );
+    }
+  }
+
   // Then the multi-angle web searches from gen.md section 8.
   const queries = buildErrorQueries({
     package: fingerprint.package,
@@ -286,6 +333,114 @@ function buildFix(results: ScoredKnowledge[]): MigrationStep[] {
   return steps.slice(0, 6);
 }
 
+/**
+ * Knowledge types that explain why an error happens, as opposed to reporting
+ * that it happened. Retrieved separately from the symptom search.
+ */
+const CAUSE_TYPES: KnowledgeType[] = [
+  'breaking_change',
+  'removed_api',
+  'renamed_api',
+  'deprecated_api',
+  'configuration_change',
+  'runtime_requirement',
+  'dependency_requirement',
+];
+
+/** Source types that make a claim authoritative about the package's own behaviour. */
+const AUTHORITATIVE = new Set<SourceType>([
+  'official_migration_guide',
+  'official_docs',
+  'official_changelog',
+  'official_release',
+]);
+
+/**
+ * Identifiers the error names, minus the package itself.
+ *
+ * `chalk.green` yields `green`, not `chalk`. Keeping the receiver would make
+ * every claim about the package match every error from it — the first version
+ * of this picked "chalk.Instance → Chalk" to explain `chalk.green`, on the
+ * strength of the word "chalk".
+ */
+function errorSymbols(fingerprint: ErrorFingerprint): Set<string> {
+  const noise = packageTokens(fingerprint.package);
+  const symbols = new Set<string>();
+
+  const add = (raw: string) => {
+    const token = raw.toLowerCase();
+    if (token && !noise.has(token)) symbols.add(token);
+  };
+
+  for (const symbol of fingerprint.stackSymbols) {
+    for (const part of symbol.split('.')) add(part);
+  }
+
+  for (const match of fingerprint.message.matchAll(/([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)/g)) {
+    add(match[1]);
+    add(match[2]);
+  }
+
+  return symbols;
+}
+
+/** The package's own name in the forms it appears as an identifier. */
+function packageTokens(packageName: string): Set<string> {
+  const bare = packageName.toLowerCase().replace(/^@[^/]+\//, '');
+  return new Set([packageName.toLowerCase(), bare, bare.replace(/-/g, ''), bare.replace(/-/g, '_')]);
+}
+
+/**
+ * How well a cause explains *this* error, lower being better.
+ *
+ * A change that names APIs the error does not mention is a poor explanation of
+ * it: chalk 5 removing `.keyword()` and `.hsl()` says nothing about why
+ * `chalk.green` is undefined. A change that names no API at all — "this package
+ * is now pure ESM" — is general, and general changes explain symptoms that name
+ * any member. So a change about other symbols ranks below a general one, which
+ * is the opposite of what relevance scoring alone produces.
+ */
+function explanatoryRank(knowledge: KnowledgeObject, symbols: Set<string>, packageName: string): number {
+  const noise = packageTokens(packageName);
+  const apis = knowledge.affectedApis
+    .map((api) => api.replace(/\(\)$/, '').replace(/^\./, '').toLowerCase())
+    .filter((api) => api && !noise.has(api));
+
+  if (apis.length === 0) return 1;
+  return apis.some((api) => symbols.has(api) || symbols.has(api.split('.').pop() ?? '')) ? 0 : 2;
+}
+
+/**
+ * Picks the claim the diagnosis is built on.
+ *
+ * Retrieval order is by relevance to the error text, which favours issues that
+ * quote the same message. That is the right first answer for "have others hit
+ * this", and the wrong one for "why". When an authoritative cause is present it
+ * leads instead, because a maintainer stating what changed beats a stranger
+ * reporting the same stack trace — ordered by how well it explains the symbols
+ * the error actually named.
+ */
+function pickPrimary(candidates: ScoredKnowledge[], fingerprint: ErrorFingerprint): ScoredKnowledge | undefined {
+  const symbols = errorSymbols(fingerprint);
+
+  const causes = candidates.filter(
+    ({ knowledge }) =>
+      CAUSE_TYPES.includes(knowledge.type) &&
+      knowledge.sources.some((source) => AUTHORITATIVE.has(source.sourceType)),
+  );
+
+  // Stable within a rank, so retrieval order still breaks ties.
+  const best = causes
+    .map((candidate, position) => ({
+      candidate,
+      position,
+      rank: explanatoryRank(candidate.knowledge, symbols, fingerprint.package),
+    }))
+    .sort((a, b) => a.rank - b.rank || a.position - b.position)[0];
+
+  return best?.candidate ?? candidates[0];
+}
+
 export async function resolveError(input: ResolveErrorInput): Promise<ErrorResolution> {
   const {
     refresh = false,
@@ -333,13 +488,42 @@ export async function resolveError(input: ResolveErrorInput): Promise<ErrorResol
     if (deduped.knowledge.length > 0) {
       const upserted = await store.upsert(deduped.knowledge);
       trace.knowledgeIndexed = upserted.inserted + upserted.updated;
+
+      // Embed before re-searching. Knowledge indexed a moment ago has no vector,
+      // so without this the answer to a first-contact error is always lexical —
+      // exactly the case where the phrasing gap is widest. A no-op when no
+      // embedder is configured.
+      await backfillEmbeddings({ store, ids: deduped.knowledge.map((item) => item.id) });
     }
 
     results = await store.search(query);
   }
 
-  const applicable = results.filter(({ knowledge }) => !input.version || appliesTo(knowledge, input.version));
-  const top = applicable[0];
+  // A second, narrower retrieval for the *cause*.
+  //
+  // Symptom and cause are written in different vocabularies. Issues say
+  // "TypeError: chalk.green is not a function"; the release note that explains
+  // it says "This package is now pure ESM" and shares not one word with the
+  // error. Ranked together the issues win every time, and the answer sits below
+  // the cut — measured on chalk 5.6.2, the release note ranked 15th of 23.
+  // So breaking changes for the version in play are retrieved separately rather
+  // than made to compete on the error's own wording.
+  const causes = await store.search({ ...query, types: [...CAUSE_TYPES], limit: 6 });
+
+  const merged = [...results];
+  const seen = new Set(results.map(({ knowledge }) => knowledge.id));
+  for (const candidate of causes) {
+    if (seen.has(candidate.knowledge.id)) continue;
+    seen.add(candidate.knowledge.id);
+    merged.push(candidate);
+  }
+
+  const applicable = merged.filter(({ knowledge }) => !input.version || appliesTo(knowledge, input.version));
+
+  // The best symptom match still leads the diagnosis — it is what the caller
+  // actually hit — but an authoritative cause outranks a community symptom when
+  // one was found.
+  const top = pickPrimary(applicable, fingerprint);
 
   const affectedVersions = [
     ...new Set(applicable.map(({ knowledge }) => knowledge.affected ?? knowledge.introduced).filter(Boolean)),
@@ -348,7 +532,7 @@ export async function resolveError(input: ResolveErrorInput): Promise<ErrorResol
     ...new Set(applicable.map(({ knowledge }) => knowledge.fixed).filter(Boolean)),
   ] as string[];
 
-  const confidence = top
+  const scored = top
     ? scoreConfidence({
         sourceTypes: top.knowledge.sources.map((source) => source.sourceType),
         independentDomains: new Set(top.knowledge.sources.map((source) => source.domain)).size,
@@ -357,6 +541,15 @@ export async function resolveError(input: ResolveErrorInput): Promise<ErrorResol
         provenance: top.knowledge.provenance,
       })
     : { score: 0, category: categorize(0) as ReturnType<typeof categorize> };
+
+  // The stored confidence already carries what a single-shot recompute cannot
+  // see: corroboration from re-research, and repositories that reported the fix
+  // working. Reporting a validated claim at its pre-validation score told the
+  // user "35% → 55%" and then answered 35% the next time they asked.
+  const confidence = {
+    score: Math.max(scored.score, top?.knowledge.confidence ?? 0),
+    category: scored.category,
+  };
 
   return {
     fingerprint,

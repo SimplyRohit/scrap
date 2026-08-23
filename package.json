@@ -1,43 +1,44 @@
 {
-  "name": "scrap",
+  "name": "riftcli",
   "version": "0.1.0",
-  "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "bun test lib/engine cli",
+    "test": "bun test lib cli",
     "typecheck": "tsc --noEmit",
-    "cli": "bun cli/index.ts"
+    "cli": "bun cli/index.ts",
+    "build:cli": "bun build cli/index.ts --target node --outfile dist/rift.js --external typescript && printf '%s\\n' '#!/usr/bin/env node' > dist/.shebang && tail -n +2 dist/rift.js >> dist/.shebang && mv dist/.shebang dist/rift.js && chmod +x dist/rift.js",
+    "prepublishOnly": "bun run typecheck && bun run test && bun run build:cli"
   },
   "dependencies": {
+    "typescript": "^5"
+  },
+  "devDependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-slot": "^1.3.3",
     "@radix-ui/react-tabs": "^1.1.21",
     "@radix-ui/react-tooltip": "^1.2.16",
-    "axios": "^1.19.0",
-    "canvas-confetti": "^1.9.4",
-    "cheerio": "^1.2.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "lucide-react": "^1.30.0",
-    "next": "16.3.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "tailwind-merge": "^3.6.0"
-  },
-  "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/bun": "^1.3.14",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "axios": "^1.19.0",
+    "canvas-confetti": "^1.9.4",
+    "cheerio": "^1.2.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "lucide-react": "^1.30.0",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4"
   },
   "packageManager": "bun@1.3.14",
   "ignoreScripts": [
@@ -49,7 +50,36 @@
     "unrs-resolver"
   ],
   "bin": {
-    "upgrade-intel": "./cli/index.ts",
-    "blast-radius": "./cli/index.ts"
-  }
+    "rift": "dist/rift.js"
+  },
+  "description": "Know what breaks before you upgrade. Package migration and error intelligence, with a citation for every claim.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SimplyRohit/scrap.git"
+  },
+  "homepage": "https://github.com/SimplyRohit/scrap#readme",
+  "bugs": {
+    "url": "https://github.com/SimplyRohit/scrap/issues"
+  },
+  "keywords": [
+    "dependencies",
+    "upgrade",
+    "migration",
+    "breaking-changes",
+    "mcp",
+    "cli",
+    "npm",
+    "semver"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "skills/upgrade-intelligence/SKILL.md",
+    "skills/generic/AGENT.md",
+    "README.md",
+    "LICENSE"
+  ]
 }

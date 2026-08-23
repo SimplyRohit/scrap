@@ -15,6 +15,12 @@ export interface BackfillOptions {
   store?: KnowledgeStore;
   /** Ceiling on objects embedded in one call, to bound cost per invocation. */
   limit?: number;
+  /**
+   * Restricts the pass to these ids. Used right after indexing, so knowledge
+   * researched in this run is searchable semantically within the same run
+   * instead of only from the next one.
+   */
+  ids?: string[];
   /** Re-embeds everything, including objects that already carry a current vector. */
   refresh?: boolean;
 }
@@ -50,7 +56,9 @@ export async function backfillEmbeddings(options: BackfillOptions = {}): Promise
   }
 
   const store = options.store ?? getStore();
-  const all = await store.all();
+  const stored = await store.all();
+  const wanted = options.ids ? new Set(options.ids) : null;
+  const all = wanted ? stored.filter((item) => wanted.has(item.id)) : stored;
   const pending = options.refresh ? all : all.filter((item) => needsEmbedding(item, embedder.id));
 
   const limit = options.limit ?? pending.length;

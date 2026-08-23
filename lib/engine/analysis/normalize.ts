@@ -98,7 +98,18 @@ function htmlToMarkdown(html: string): { title: string; markdown: string } {
 
 const HEADING_RE = /^(#{1,6})\s+(.*)$/;
 const FENCE_RE = /^```([\w+-]*)\s*$/;
-const BULLET_RE = /^\s*(?:[-*+]|\d+\.)\s+(.*)$/;
+const BULLET_RE = /^(\s*)(?:[-*+]|\d+\.)\s+(.*)$/;
+
+/**
+ * Indentation at which a bullet is a child of the one above it.
+ *
+ * Nested bullets qualify their parent — "This package is now pure ESM" followed
+ * by an indented "If you use TypeScript, you need 4.7 or later". Flattened, the
+ * qualification becomes a peer claim and competes with the thing it qualifies:
+ * a chalk 5 diagnosis led with the TypeScript note instead of the ESM change.
+ * Two spaces is the smallest indent any Markdown renderer treats as nesting.
+ */
+const NESTED_BULLET_INDENT = 2;
 
 export function parseMarkdown(markdown: string, fallbackTitle = ''): NormalizedDocument {
   // GitHub release bodies are CRLF. A trailing \r defeats every `$`-anchored
@@ -171,7 +182,19 @@ export function parseMarkdown(markdown: string, fallbackTitle = ''): NormalizedD
     buffer.push(line);
 
     const bullet = BULLET_RE.exec(line);
-    if (bullet && bullet[1].trim()) current.bullets.push(bullet[1].trim());
+    if (bullet && bullet[2].trim()) {
+      const indent = bullet[1].replace(/\t/g, '    ').length;
+      const text = bullet[2].trim();
+      const parent = current.bullets.length - 1;
+
+      // A nested bullet is appended to its parent so the claim keeps its
+      // qualifications, rather than being split into competing claims.
+      if (indent >= NESTED_BULLET_INDENT && parent >= 0) {
+        current.bullets[parent] = `${current.bullets[parent]} ${text}`;
+      } else {
+        current.bullets.push(text);
+      }
+    }
   }
 
   if (inFence && fenceLines.length > 0) {

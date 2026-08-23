@@ -11,6 +11,9 @@ const TRANSPORT: Record<SourceTransport, { label: string; tone: string }> = {
   brightdata: { label: "Unlocker", tone: "text-high" },
   direct: { label: "Direct", tone: "text-muted-foreground" },
   cache: { label: "Cache", tone: "text-safe" },
+  // Release bodies arrive through the GitHub API but are cited as the release
+  // page, so the trace has to be able to say which of the two it actually read.
+  api: { label: "API", tone: "text-muted-foreground" },
 };
 
 export function ResearchTrace({ analysis }: { analysis: FullBlastRadiusAnalysis | null }) {

@@ -11,6 +11,7 @@
 
 import { normalizeForHash, shortHash } from '../hash';
 import {
+  BREAKING_TYPES,
   severityForType,
   type Ecosystem,
   type KnowledgeObject,
@@ -83,8 +84,12 @@ const SECURITY_SUBSTANCE =
 
 const CLASSIFIERS: Array<{ type: KnowledgeType; pattern: RegExp }> = [
   { type: 'security_fix', pattern: SECURITY_SUBSTANCE },
-  { type: 'removed_api', pattern: /\b(has been|have been|was|were|is|are)?\s*removed\b|\bno longer (exists?|available|supported|works?)\b|\bdropped support\b|\bdeleted\b/i },
-  { type: 'renamed_api', pattern: /\brenamed\b|\bnow (called|named)\b|\bhas been renamed to\b/i },
+  // The leading `^remove[sd]?` alternative catches the imperative bullet a
+  // changelog actually writes — "Remove `prefix` as a function". Anchoring it to
+  // the start keeps incidental prose ("a function so interceptors can be
+  // removed") out, which is what the past-tense alternatives already handle.
+  { type: 'removed_api', pattern: /^\s*remove[sd]?\b|\b(has been|have been|was|were|is|are)?\s*removed\b|\bno longer (exists?|available|supported|works?)\b|\bdropped support\b|\bdeleted\b/i },
+  { type: 'renamed_api', pattern: /^\s*rename[sd]?\b|\brenamed\b|\bnow (called|named)\b|\bhas been renamed to\b/i },
   { type: 'deprecated_api', pattern: /\bdeprecat/i },
   { type: 'runtime_requirement', pattern: /\b(node(\.js)?|python|bun|deno)\s*(>=|>|version)?\s*\d+(\.\d+)?\b.*(required|minimum|no longer|support)|minimum (required )?(node|python) version/i },
   { type: 'dependency_requirement', pattern: /\bpeer dependenc|requires? [\w@/-]+ (>=|\^|version)\s*\d/i },
@@ -162,32 +167,75 @@ const REPOSITORY_HOUSEKEEPING =
 const VERSION_IN_TEXT = /\bv?(\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?)\b/;
 
 /**
+ * A claim that states a change or a requirement, rather than commenting on one.
+ *
+ * Only applied where the type came from the heading. A `### Breaking` section
+ * contains advisory prose alongside the changes — "It's totally fine to stay on
+ * Chalk v4", "The Chalk issue tracker is not a support channel" — and inheriting
+ * the heading's type turns each of those into a breaking change that then
+ * competes with the real one for the top of a diagnosis.
+ */
+const ASSERTS_CHANGE =
+  /`|→|\b(now|no longer|removed?|renamed?|deprecated?|must|requires?|required|need to|moved?|replaced?|changed?|dropped?|added?)\b/i;
+
+/** Where a classification came from, which decides how much the claim still has to prove. */
+type ClassificationBasis = 'text' | 'heading' | 'maintenance';
+
+/**
  * Classifies a claim in the context of its own heading. Order of authority:
  * an explicit breaking marker, the conventional-commit prefix, the Keep a
  * Changelog category, the enclosing maintenance section, then the prose patterns.
  */
-function classify(text: string, heading: string, headingContext: string): KnowledgeType | null {
+function classify(
+  text: string,
+  heading: string,
+  headingContext: string,
+): { type: KnowledgeType; basis: ClassificationBasis } | null {
   const explicitlyBreaking = EXPLICIT_BREAKING.test(text) || CONVENTIONAL_BREAKING.test(text);
-  if (explicitlyBreaking) return classifyProse(text) ?? 'breaking_change';
+  if (explicitlyBreaking) return { type: classifyProse(text) ?? 'breaking_change', basis: 'text' };
 
   // Substance outranks the heading. Projects list "Fixed prototype pollution in
   // formDataToJSON" under "Bug Fixes"; filing that as a bug fix understates how
   // urgently a consumer needs to upgrade.
-  if (SECURITY_SUBSTANCE.test(text)) return 'security_fix';
+  if (SECURITY_SUBSTANCE.test(text)) return { type: 'security_fix', basis: 'text' };
 
   for (const [pattern, type] of CONVENTIONAL_PREFIX) {
-    if (pattern.test(text)) return type;
+    if (pattern.test(text)) return { type, basis: 'text' };
   }
 
   for (const [pattern, type] of CHANGELOG_HEADING) {
-    if (pattern.test(heading)) return type;
+    if (!pattern.test(heading)) continue;
+
+    // `Fixed` / `Security` behave like a maintenance section: a fix is kept
+    // whatever its wording, because "was this fixed?" is a question the index
+    // has to answer and fix prose rarely asserts anything.
+    if (type === 'bug_fix' || type === 'security_fix') return { type, basis: 'maintenance' };
+
+    // `Changed` is the one vague heading: it is a container, not a verdict, and
+    // "Removed `max-w-auto`" or "Rename `@variant` to `@custom-variant`" sit
+    // under it happily. Taking its word filed 34 of Tailwind 4's breaking
+    // changes as behaviour notes, invisible to every report surface.
+    //
+    // The other headings stay authoritative. `Added` really does mean new, even
+    // when the prose says "so that interceptors can be removed" — reading a
+    // breaking change out of that incidental wording is how this went wrong the
+    // first time.
+    if (type === 'behavior_change') {
+      const substance = classifyProse(text);
+      if (substance && BREAKING_TYPES.has(substance)) return { type: substance, basis: 'text' };
+    }
+
+    return { type, basis: 'heading' };
   }
 
   // A maintenance section demotes its contents; only an explicit marker escapes.
-  // Security is already handled above, so anything left here is a fix.
-  if (MAINTENANCE_HEADING.test(headingContext)) return 'bug_fix';
+  // Security is already handled above, so anything left here is a fix. Basis is
+  // `maintenance` rather than `heading`: a bug fix is kept whatever its wording,
+  // because "was this fixed?" is a question the index has to be able to answer.
+  if (MAINTENANCE_HEADING.test(headingContext)) return { type: 'bug_fix', basis: 'maintenance' };
 
-  return classifyProse(text);
+  const prose = classifyProse(text);
+  return prose ? { type: prose, basis: 'text' } : null;
 }
 
 /**
@@ -224,7 +272,11 @@ function extractSymbols(text: string): string[] {
   const symbols = new Set<string>();
 
   for (const match of text.matchAll(/`([^`]{1,80})`/g)) {
-    const candidate = match[1].trim();
+    // A leading dot is how release notes write a member: "Remove `.keyword()`,
+    // `.hsl()`". Rejecting those left the claim naming no API at all, which made
+    // a change about five specific methods look as general as "this package is
+    // now pure ESM".
+    const candidate = match[1].trim().replace(/^\./, '');
     if (/^[A-Za-z_$@][\w$.@/-]*(\(\))?$/.test(candidate)) symbols.add(candidate.replace(/\(\)$/, '()'));
   }
 
@@ -353,10 +405,19 @@ export function extractKnowledge(
       // by a pattern that happens to match its wording.
       if (isRepositoryHousekeeping(claim)) continue;
 
-      const type =
+      const classified =
         classify(claim, section.heading, headingContext) ??
-        (sectionIsRelevant ? inferTypeFromHeading(headingContext) : null);
-      if (!type) continue;
+        (sectionIsRelevant
+          ? ((inferred) => (inferred ? { type: inferred, basis: 'heading' as const } : null))(
+              inferTypeFromHeading(headingContext),
+            )
+          : null);
+      if (!classified) continue;
+
+      const { type, basis } = classified;
+
+      // Inheriting a heading's type is not enough on its own.
+      if (basis === 'heading' && !ASSERTS_CHANGE.test(claim)) continue;
 
       // Outside a changelog section, require the claim itself to be unambiguous —
       // otherwise ordinary documentation prose produces noise.

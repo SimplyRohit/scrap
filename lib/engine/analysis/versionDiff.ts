@@ -6,8 +6,8 @@
  * minor bump that removed an API you call.
  */
 
-import { classifyDelta, isBreakingDelta, type VersionDelta } from '../semver';
-import { SEVERITY_ORDER, type KnowledgeObject, type Severity } from '../knowledge';
+import { classifyDelta, isBreakingDelta, isInWindow, type VersionDelta } from '../semver';
+import { BREAKING_TYPES, SEVERITY_ORDER, type KnowledgeObject, type Severity } from '../knowledge';
 import type { PackageRef } from '../request';
 
 export type RiskLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'SAFE';
@@ -40,16 +40,6 @@ const SEVERITY_WEIGHT: Record<Severity, number> = {
 };
 
 /** Types that describe an actual break rather than an informational change. */
-const BREAKING_TYPES = new Set([
-  'breaking_change',
-  'removed_api',
-  'renamed_api',
-  'runtime_requirement',
-  'dependency_requirement',
-  'configuration_change',
-  'environment_change',
-]);
-
 export function isBreaking(knowledge: KnowledgeObject): boolean {
   return BREAKING_TYPES.has(knowledge.type);
 }
@@ -58,6 +48,26 @@ export interface RiskAssessment {
   score: number;
   level: RiskLevel;
   rationale: string[];
+}
+
+/**
+ * A changelog carries the project's whole history. A claim anchored to a version
+ * outside the requested window is real, but it is not part of *this* upgrade —
+ * counting it rates a 3.4 to 4.0 jump on breaking changes from 1.x. Claims with
+ * no version anchor inherit the target version upstream, so they are kept.
+ */
+export function inUpgradeWindow(item: KnowledgeObject): boolean {
+  if (!item.introduced) return true;
+  return isInWindow(item.introduced, item.fromVersion, item.toVersion);
+}
+
+/**
+ * Breaking, and part of *this* upgrade. Every report surface filters on this
+ * rather than on `isBreaking` alone, so a changelog's back catalogue cannot
+ * present itself as work the user has to do now.
+ */
+export function isBreakingInWindow(item: KnowledgeObject): boolean {
+  return isBreaking(item) && inUpgradeWindow(item);
 }
 
 /**
@@ -80,7 +90,7 @@ export function assessRisk(change: VersionChange, knowledge: KnowledgeObject[]):
     rationale.push(`${change.delta} version jump — semver permits breaking changes.`);
   }
 
-  const breaking = knowledge.filter(isBreaking);
+  const breaking = knowledge.filter(isBreakingInWindow);
   for (const item of breaking) {
     score += SEVERITY_WEIGHT[item.severity] * Math.max(0.35, item.confidence);
   }

@@ -8,7 +8,7 @@
 
 import { categorize, confidenceCaveat, isAssertable } from '../analysis/confidence';
 import { applicableKnowledge, type RepositoryImpact, type UsageSite } from '../analysis/repository';
-import { isBreaking } from '../analysis/versionDiff';
+import { isBreakingInWindow } from '../analysis/versionDiff';
 import { findNode, type KnowledgeGraph } from '../index/graph';
 import { compareStrings } from '../semver';
 import type { ErrorResolution } from '../errorPipeline';
@@ -81,7 +81,7 @@ function renderFinding(knowledge: KnowledgeObject, index: number): string {
 }
 
 export function renderBreakingChanges(result: PackageResearchResult): string {
-  const breaking = result.knowledge.filter(isBreaking).sort(bySeverityThenConfidence);
+  const breaking = result.knowledge.filter(isBreakingInWindow).sort(bySeverityThenConfidence);
 
   const header = [
     `# Breaking changes — ${result.package}`,
@@ -179,7 +179,7 @@ function renderRepositoryImpact(findings: KnowledgeObject[], impact?: Repository
 /** gen.md section 15. */
 export function renderMigrationPlan(result: PackageResearchResult, impact?: RepositoryImpact): string {
   const { change, risk } = result;
-  const findings = result.knowledge.filter(isBreaking).sort(bySeverityThenConfidence);
+  const findings = result.knowledge.filter(isBreakingInWindow).sort(bySeverityThenConfidence);
   const assertable = findings.filter((item) => isAssertable(item.confidence));
   const speculative = findings.filter((item) => !isAssertable(item.confidence));
 
@@ -496,7 +496,7 @@ export function renderAnalysisSummary(analysis: ManifestResearchResult): string 
 
   for (const result of [...analysis.results].sort((a, b) => b.risk.score - a.risk.score)) {
     lines.push(
-      `| \`${result.package}\` | ${result.change.fromVersion} | ${result.change.toVersion ?? '—'} | ${result.change.delta} | ${result.risk.level} | ${result.knowledge.filter(isBreaking).length} | ${result.trace.fetched.length} |`,
+      `| \`${result.package}\` | ${result.change.fromVersion} | ${result.change.toVersion ?? '—'} | ${result.change.delta} | ${result.risk.level} | ${result.knowledge.filter(isBreakingInWindow).length} | ${result.trace.fetched.length} |`,
     );
   }
 
