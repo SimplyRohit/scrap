@@ -8,8 +8,11 @@
  */
 
 import { writeStdout } from '../lib/stdout';
-import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { boolFlag, numberFlag, parseArgs, stringFlag, type ParsedArgs } from './args';
 import {
@@ -72,6 +75,7 @@ ${bold('Commands')}
   prune                                    Drop indexed entries the current rules reject
   reindex [name]                           Re-extract cached documents under current rules
   mcp                                      Serve the engine over MCP on stdio
+  install-skill                            Install the agent skill into ~/.claude/skills
   sources <name>                           Show the sources that would be researched
   report --package <p> --summary <s>       Record a fix outcome (validation feedback)
   stats                                    Index statistics and engine capabilities
@@ -716,6 +720,39 @@ async function commandMcp(): Promise<number> {
   return 0;
 }
 
+/**
+ * Copies the agent skill into `~/.claude/skills/`, where Claude Code looks.
+ *
+ * A published package can put the markdown on someone's disk, but nothing makes
+ * an agent read it from inside `node_modules`. Without this step "install rift"
+ * gives you a CLI that agents never learn to reach for, which is the whole
+ * point of shipping the skill alongside it.
+ */
+async function commandInstallSkill(args: ParsedArgs): Promise<number> {
+  // Resolves inside the published bundle and inside a git checkout alike.
+  const source = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'upgrade-intelligence', 'SKILL.md');
+  const target = path.join(homedir(), '.claude', 'skills', 'rift', 'SKILL.md');
+
+  let markdown: string;
+  try {
+    markdown = await readFile(source, 'utf8');
+  } catch {
+    return fail(`Could not read the skill from ${source}`);
+  }
+
+  if (existsSync(target) && !boolFlag(args.flags, 'force')) {
+    process.stdout.write(dim(`  ${target} already exists — pass --force to overwrite\n`));
+    return 0;
+  }
+
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, markdown, 'utf8');
+
+  process.stdout.write(`${green('installed')} ${target}\n`);
+  process.stdout.write(dim('  Restart Claude Code, then ask it to upgrade a package.\n'));
+  return 0;
+}
+
 const COMMANDS: Record<string, (args: ParsedArgs) => Promise<number>> = {
   package: commandPackage,
   migrate: commandPackage,
@@ -731,6 +768,7 @@ const COMMANDS: Record<string, (args: ParsedArgs) => Promise<number>> = {
   sources: commandSources,
   report: commandReport,
   stats: commandStats,
+  'install-skill': commandInstallSkill,
 };
 
 export async function run(argv: string[]): Promise<number> {
