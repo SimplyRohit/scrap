@@ -15,6 +15,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { boolFlag, numberFlag, parseArgs, stringFlag, type ParsedArgs } from './args';
+import { startProgress } from './progress';
 import {
   bold,
   bullet,
@@ -89,6 +90,7 @@ ${bold('Common options')}
   --max-documents <n>    Cap documents fetched per package (default 6)
   --markdown             Print the generated Markdown instead of a summary
   --fail-on <level>      Exit 2 if risk reaches this level (LOW|MEDIUM|HIGH|CRITICAL)
+  --quiet                No progress on stderr (also RIFT_NO_PROGRESS=1)
 
 ${bold('Examples')}
   rift migrate prisma --from 5.22.0 --to 6.0.0
@@ -823,7 +825,19 @@ export async function run(argv: string[]): Promise<number> {
     return 1;
   }
 
-  return handler(args);
+  // Wired here rather than per command, so no long-running command can be added
+  // later and silently be the one that looks hung. `mcp` is excluded: it is a
+  // server, and a spinner that never ends is not progress.
+  //
+  // `--json` is not a reason to be quiet. The report goes to stdout and this
+  // goes to stderr, so `--json | jq` still works while the human watching the
+  // terminal can see it is alive.
+  const stop = args.command === 'mcp' ? () => {} : startProgress({ quiet: boolFlag(args.flags, 'quiet') });
+  try {
+    return await handler(args);
+  } finally {
+    stop();
+  }
 }
 
 /**
