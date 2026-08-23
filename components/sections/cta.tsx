@@ -38,9 +38,6 @@ export function Cta() {
             </ButtonLink>
             <CopyCommand command={SITE.install} size="lg" />
           </div>
-          <p className="mt-4 text-[13px] text-muted-foreground">
-            then <code className="font-mono text-foreground/80">{SITE.command}</code>
-          </p>
         </Reveal>
       </Container>
     </Section>

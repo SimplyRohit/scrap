@@ -86,8 +86,6 @@ export default function OpengraphImage() {
           }}
         >
           <span>{SITE.install}</span>
-          <span style={{ opacity: 0.5 }}>·</span>
-          <span>{SITE.command}</span>
         </div>
       </div>
     ),

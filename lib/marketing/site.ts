@@ -11,13 +11,15 @@ export const SITE = {
   url: "https://rift-cli.vercel.app",
   repo: "https://github.com/SimplyRohit/scrap",
   twitter: "@riftdev",
+  // Just the install. A usage line here was a second place to keep a command
+  // string correct, and it drifted out of step with the CLI the first time the
+  // flags moved. The commands live in the docs and in `content.ts`, where they
+  // sit next to the explanation that makes them mean something.
+  //
   // The package is `riftcli`; the command it installs is `rift`. The npm name
   // `rift` belongs to someone else's game maths library, so the two can never be
-  // collapsed into one word. Showing the install line is what earns the right to
-  // write the short command everywhere else — without it, a bare `rift` is an
-  // instruction the reader cannot follow.
+  // collapsed into one word.
   install: "npm i -g riftcli",
-  command: "rift repo . --fail-on HIGH",
   founded: "2025",
 } as const;
 

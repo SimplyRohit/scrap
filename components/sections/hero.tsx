@@ -79,15 +79,6 @@ export function Hero() {
             <span className="link-underline">See how it works</span>
           </a>
         </Reveal>
-
-        {/* The install line is what the copy button carries, because it is the
-            first thing to run. This says what to type next — the short command
-            the rest of the page uses. */}
-        <Reveal delay={200}>
-          <p className="mt-4 text-[13px] text-muted-foreground">
-            then <code className="font-mono text-foreground/80">{SITE.command}</code>
-          </p>
-        </Reveal>
       </Container>
 
       <Container className="relative pb-20">
