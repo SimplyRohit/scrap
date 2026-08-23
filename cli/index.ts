@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * upgrade-intel — the CLI from gen.md section 25.
+ * rift — the CLI from gen.md section 25.
  *
  * Calls the engine directly rather than the HTTP API, so it works with no server
  * running. Every command supports `--json` because the primary consumer is a
@@ -55,10 +55,10 @@ import { resolveSourcePlan } from '../lib/engine/research/sources';
 import { serpConfigured } from '../lib/engine/research/search';
 
 const USAGE = `
-${bold('upgrade-intel')} — package migration and error intelligence
+${bold('rift')} — package migration and error intelligence
 
 ${bold('Usage')}
-  upgrade-intel <command> [options]
+  rift <command> [options]
 
 ${bold('Commands')}
   package <name> --from <version>          Research the latest upgrade for a package
@@ -84,9 +84,9 @@ ${bold('Common options')}
   --fail-on <level>      Exit 2 if risk reaches this level (LOW|MEDIUM|HIGH|CRITICAL)
 
 ${bold('Examples')}
-  upgrade-intel migrate prisma --from 5.22.0 --to 6.0.0
-  upgrade-intel error --package prisma --version 6.0.0 --error "PrismaClientInitializationError: ..."
-  upgrade-intel repo . --fail-on HIGH --json
+  rift migrate prisma --from 5.22.0 --to 6.0.0
+  rift error --package prisma --version 6.0.0 --error "PrismaClientInitializationError: ..."
+  rift repo . --fail-on HIGH --json
 `;
 
 const RISK_ORDER: RiskLevel[] = ['SAFE', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -182,7 +182,7 @@ function printResearchResult(result: PackageResearchResult, args: ParsedArgs): v
 
 async function commandPackage(args: ParsedArgs): Promise<number> {
   const name = args.positional[0];
-  if (!name) fail('usage: upgrade-intel package <name> --from <version>');
+  if (!name) fail('usage: rift package <name> --from <version>');
 
   const from = stringFlag(args.flags, 'from', 'current');
   if (!from) fail('`--from <version>` is required — the engine will not guess your current version');
@@ -373,7 +373,7 @@ async function commandSearch(args: ParsedArgs): Promise<number> {
   const query = args.positional.join(' ');
   const packageName = stringFlag(args.flags, 'package', 'p');
 
-  if (!query && !packageName) fail('usage: upgrade-intel search <query> [--package <name>]');
+  if (!query && !packageName) fail('usage: rift search <query> [--package <name>]');
 
   const results = await getStore().search({
     text: query || undefined,
@@ -389,7 +389,7 @@ async function commandSearch(args: ParsedArgs): Promise<number> {
   }
 
   if (results.length === 0) {
-    process.stdout.write(dim('No matching knowledge. Run `upgrade-intel index <name> --from <version>` first.\n'));
+    process.stdout.write(dim('No matching knowledge. Run `rift index <name> --from <version>` first.\n'));
     return 0;
   }
 
@@ -412,7 +412,7 @@ async function commandIndex(args: ParsedArgs): Promise<number> {
   const name = args.positional[0];
   const from = stringFlag(args.flags, 'from');
 
-  if (!name) fail('usage: upgrade-intel index <name> --from <version>');
+  if (!name) fail('usage: rift index <name> --from <version>');
   if (!from) fail('`--from <version>` is required — indexing needs a window to research');
 
   const result = await researchPackageUpgrade(
@@ -442,7 +442,7 @@ async function commandIndex(args: ParsedArgs): Promise<number> {
 
 async function commandSources(args: ParsedArgs): Promise<number> {
   const name = args.positional[0];
-  if (!name) fail('usage: upgrade-intel sources <name>');
+  if (!name) fail('usage: rift sources <name>');
 
   const ecosystem = (stringFlag(args.flags, 'ecosystem') as Ecosystem) ?? detectEcosystem(name, 'nodejs');
   const metadata = await tryFetchPackageMetadata(name, ecosystem);
@@ -551,7 +551,7 @@ async function commandStats(args: ParsedArgs): Promise<number> {
     process.stdout.write(`  ${dim('retrieval is lexical only — set VOYAGE_API_KEY for semantic search')}\n`);
   } else if (stats.withEmbeddings < stats.total) {
     process.stdout.write(
-      `  ${dim(`${stats.total - stats.withEmbeddings} object(s) have no vector — run \`upgrade-intel backfill\``)}\n`,
+      `  ${dim(`${stats.total - stats.withEmbeddings} object(s) have no vector — run \`rift backfill\``)}\n`,
     );
   }
 
@@ -560,14 +560,14 @@ async function commandStats(args: ParsedArgs): Promise<number> {
 
 async function commandGraph(args: ParsedArgs): Promise<number> {
   const packageName = args.positional[0];
-  if (!packageName) fail('usage: upgrade-intel graph <package> [--version <version>]');
+  if (!packageName) fail('usage: rift graph <package> [--version <version>]');
 
   const version = stringFlag(args.flags, 'version', 'v');
   const knowledge = (await getStore().all()).filter((item) => item.package === packageName);
 
   if (knowledge.length === 0) {
     process.stdout.write(
-      dim(`Nothing indexed for ${packageName}. Run \`upgrade-intel index ${packageName} --from <version>\` first.\n`),
+      dim(`Nothing indexed for ${packageName}. Run \`rift index ${packageName} --from <version>\` first.\n`),
     );
     return 0;
   }

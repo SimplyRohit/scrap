@@ -9,7 +9,10 @@ export const SITE = {
   url: "https://rift.vercel.app",
   repo: "https://github.com/SimplyRohit/scrap",
   twitter: "@riftdev",
-  install: "bunx rift repo . --fail-on HIGH",
+  // Not `bunx rift`: npm's `rift` is someone else's game maths library, so that
+  // line runs a stranger's code. Restore the bunx form only once this package is
+  // published under a name we own.
+  install: "rift repo . --fail-on HIGH",
   founded: "2025",
 } as const;
 

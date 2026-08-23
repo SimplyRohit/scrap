@@ -6,8 +6,8 @@ Two integration surfaces, same engine behind both.
 ## Setup
 
 ```bash
-cd <this repository> && bun link      # puts `upgrade-intel` on PATH
-upgrade-intel stats                   # every capability should read `on`
+cd <this repository> && bun link      # puts `rift` on PATH
+rift stats                   # every capability should read `on`
 ```
 
 Credentials go in `~/.upgrade-intel/.env`, not a project `.env.local`: `bun`
@@ -28,7 +28,7 @@ overrides this with its own `.upgrade-intel/` directory or `UPGRADE_INTEL_DATA_D
 ## CLI
 
 ```bash
-upgrade-intel <command> --json
+rift <command> --json
 ```
 
 Every command accepts `--json` and writes a single JSON object to stdout.
@@ -131,7 +131,7 @@ but `withEmbeddings < total`, run `POST /api/index {"action":"backfill"}` first.
 ## MCP
 
 ```bash
-upgrade-intel mcp
+rift mcp
 ```
 
 Serves the engine over MCP on stdio (JSON-RPC 2.0, newline-delimited, protocol

@@ -57,7 +57,7 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 | `POST /api/search` | Hybrid retrieval over the index. Never scrapes |
 | `GET  /api/index` | Index statistics and capability report |
 | `POST /api/index` | Index a package on demand, or `{"action":"backfill"}` to embed |
-| `upgrade-intel mcp` | The same engine over MCP on stdio (section 18) |
+| `rift mcp` | The same engine over MCP on stdio (section 18) |
 | `GET  /api/graph` | Package knowledge graph; `?format=tree` for the section 10 diagram |
 | `POST /api/errors/analyze` | Diagnose an error against the index, research if insufficient |
 | `POST /api/repositories/analyze` | Read a repo's manifest, research it, correlate findings to files |
@@ -67,7 +67,7 @@ in `knowledge.ts`, and nothing downstream reads generated Markdown back.
 ## CLI
 
 ```bash
-bun run cli -- <command>          # or ./skills/upgrade-intelligence/scripts/upgrade-intel
+bun run cli -- <command>          # or ./skills/upgrade-intelligence/scripts/rift
 ```
 
 Commands follow gen.md section 25: `package`, `migrate`, `error`, `repo`,
@@ -179,8 +179,8 @@ matching prose in page metadata.
   explains a missing member and "we removed `.hsl()`" does not.
 - **Extraction rules tighten over time; the index does not follow.** Entries
   written before a rule was added stay until something rewrites them.
-  `upgrade-intel prune` re-applies the housekeeping filter by title alone;
-  `upgrade-intel reindex` re-extracts the documents still in the fetch cache, so
+  `rift prune` re-applies the housekeeping filter by title alone;
+  `rift reindex` re-extracts the documents still in the fetch cache, so
   reclassification costs nothing and needs no network. Neither is a full replay:
   reindex adds and reclassifies but will not delete without `--prune-missing`,
   because the claim budget alone can make a large changelog yield fewer claims

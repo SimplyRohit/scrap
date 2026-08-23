@@ -13,12 +13,12 @@ Findings below 75% confidence are hypotheses, not facts.
 
 ## Setup
 
-The `upgrade-intel` command must be on `PATH`, and it must find its credentials
+The `rift` command must be on `PATH`, and it must find its credentials
 from whatever directory you are working in.
 
 ```bash
-cd <this repository> && bun link      # puts `upgrade-intel` on PATH
-upgrade-intel stats                   # verify
+cd <this repository> && bun link      # puts `rift` on PATH
+rift stats                   # verify
 ```
 
 `stats` prints a capability block. Every line should read `on`:
@@ -54,7 +54,7 @@ its own `.upgrade-intel/` directory, or by setting `UPGRADE_INTEL_DATA_DIR`.
 ## When upgrading a dependency
 
 ```bash
-upgrade-intel migrate <package> --from <current> --to <target> --json
+rift migrate <package> --from <current> --to <target> --json
 ```
 
 Then:
@@ -63,7 +63,7 @@ Then:
    and `confidence >= 0.75`.
 2. Find the real usage before changing anything:
    ```bash
-   upgrade-intel repo . --packages <package> --json
+   rift repo . --packages <package> --json
    ```
    Use `affectedFiles` and `affectedSymbols`. If `usesPackage` is `false`, the
    upgrade cannot break this repository through its API — stop.
@@ -87,7 +87,7 @@ Then:
 ## When a command fails after a dependency change
 
 ```bash
-upgrade-intel error \
+rift error \
   --package <package> \
   --version <version> \
   --error "<the error message>" \
@@ -112,7 +112,7 @@ Always report, whether it worked or not. A failed attempt is as useful as a
 successful one — it stops the next agent repeating it.
 
 ```bash
-upgrade-intel report \
+rift report \
   --package <package> \
   --version <version> \
   --error "<the same error text you resolved>" \
@@ -139,23 +139,23 @@ your work.
 - **Prefer upgrading to patching** when `fixedVersions` shows the bug is already fixed.
 - Regenerate any generated artifacts (Prisma client, GraphQL types, protobufs)
   before concluding a migration failed.
-- **Check `upgrade-intel stats` before trusting a `search` miss.** If it reports
+- **Check `rift stats` before trusting a `search` miss.** If it reports
   `retrieval is lexical only`, a phrasing that differs from the changelog will not
   match, and "nothing found" means nothing was found *by keyword*. If it reports
-  objects with no vector, run `upgrade-intel backfill` first.
+  objects with no vector, run `rift backfill` first.
 
 ## Other commands
 
 ```bash
-upgrade-intel search "<query>" --package <p> --version <v>   # index only, never scrapes
-upgrade-intel sources <package>                              # what would be researched
-upgrade-intel index <package> --from <version>               # warm the index
-upgrade-intel graph <package> [--version <v>]                # what each version broke and what fixed it
-upgrade-intel backfill                                       # embed indexed knowledge for semantic search
-upgrade-intel prune                                          # list index entries the current rules reject
-upgrade-intel reindex [package]                              # re-extract cached documents under current rules
-upgrade-intel stats                                          # index size, capabilities
-upgrade-intel mcp                                            # serve the engine over MCP on stdio
+rift search "<query>" --package <p> --version <v>   # index only, never scrapes
+rift sources <package>                              # what would be researched
+rift index <package> --from <version>               # warm the index
+rift graph <package> [--version <v>]                # what each version broke and what fixed it
+rift backfill                                       # embed indexed knowledge for semantic search
+rift prune                                          # list index entries the current rules reject
+rift reindex [package]                              # re-extract cached documents under current rules
+rift stats                                          # index size, capabilities
+rift mcp                                            # serve the engine over MCP on stdio
 ```
 
 `reindex` re-reads what is already in the fetch cache and re-extracts it under
@@ -174,7 +174,7 @@ threshold — useful for gating CI.
 
 ## As an MCP server
 
-`upgrade-intel mcp` speaks JSON-RPC over stdio, exposing the same engine as six
+`rift mcp` speaks JSON-RPC over stdio, exposing the same engine as six
 tools: `search_knowledge`, `analyze_error`, `research_upgrade`,
 `correlate_repository`, `package_graph`, and `report_fix`.
 
