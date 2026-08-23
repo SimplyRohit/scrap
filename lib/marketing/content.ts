@@ -22,7 +22,14 @@ export type ConsoleLine =
   /** A fetch that only succeeded because it was unlocked. */
   | { kind: "unlock"; host: string; status: string; text: string }
   | { kind: "rule" }
-  | { kind: "summary"; pkg: string; range: string; risk: RiskLevel; score: string; breaking: string }
+  | {
+      kind: "summary";
+      pkg: string;
+      range: string;
+      risk: RiskLevel;
+      score: string;
+      breaking: string;
+    }
   | { kind: "finding"; severity: RiskLevel; category: string; title: string }
   | { kind: "quote"; text: string }
   | { kind: "cite"; text: string; tier: string }
@@ -30,10 +37,23 @@ export type ConsoleLine =
 
 export const CONSOLE_LINES: ConsoleLine[] = [
   { kind: "prompt", text: "rift migrate next --from 13.4.19 --to 14.2.0" },
-  { kind: "meta", label: "index", text: "no coverage for this window, researching" },
+  {
+    kind: "meta",
+    label: "index",
+    text: "no coverage for this window, researching",
+  },
   { kind: "meta", label: "registry", text: "npm · resolved 14.2.0" },
-  { kind: "unlock", host: "nextjs.org/docs/…/upgrading", status: "403", text: "unlocked" },
-  { kind: "meta", label: "sources", text: "6 planned · 6 read · 2 unlocked · 2 from cache" },
+  {
+    kind: "unlock",
+    host: "nextjs.org/docs/…/upgrading",
+    status: "403",
+    text: "unlocked",
+  },
+  {
+    kind: "meta",
+    label: "sources",
+    text: "6 planned · 6 read · 2 unlocked · 2 from cache",
+  },
   { kind: "rule" },
   {
     kind: "summary",
@@ -93,7 +113,11 @@ export const EVIDENCE_STEPS = [
 export const PIPELINE_STAGES = [
   { label: "INPUT", detail: "manifest, package, error" },
   // The one stage that leaves the machine, and the one that needs help doing it.
-  { label: "RESEARCH", detail: "registry → releases → docs", note: "Bright Data" },
+  {
+    label: "RESEARCH",
+    detail: "registry → releases → docs",
+    note: "Bright Data",
+  },
   { label: "NORMALIZE", detail: "HTML → section tree" },
   { label: "KNOWLEDGE", detail: "quote-anchored objects" },
   { label: "INDEX", detail: "BM25 + version filter" },
@@ -107,7 +131,7 @@ export const MODES = [
     index: "01",
     name: "Upgrade mode",
     lede: "Start from a manifest or a single package. Get back what changed, what breaks, and which of your files touch it.",
-    command: "rift repo . --fail-on HIGH --json",
+    command: "rift repo . --fail-on HIGH --markdown > migration.md",
     points: [
       "package.json, requirements.txt, pyproject.toml",
       "Lockfile overlay for the versions actually installed",
@@ -465,27 +489,70 @@ export const CLAIM_TRACES = [
 
 /** The authority ladder, highest first. Weight is what confidence scoring uses. */
 export const SOURCE_TIERS = [
-  { tier: "official_migration", label: "Migration guide", weight: 1.0, note: "Written for exactly this jump" },
-  { tier: "official_release", label: "Release notes", weight: 0.9, note: "What the maintainers announced" },
-  { tier: "official_changelog", label: "Changelog", weight: 0.85, note: "Per-version, usually terse" },
-  { tier: "official_docs", label: "Documentation", weight: 0.75, note: "Current state, not the delta" },
-  { tier: "registry", label: "Registry metadata", weight: 0.6, note: "Versions, dates, engines" },
-  { tier: "community", label: "Issues & discussions", weight: 0.35, note: "Read last, never alone" },
+  {
+    tier: "official_migration",
+    label: "Migration guide",
+    weight: 1.0,
+    note: "Written for exactly this jump",
+  },
+  {
+    tier: "official_release",
+    label: "Release notes",
+    weight: 0.9,
+    note: "What the maintainers announced",
+  },
+  {
+    tier: "official_changelog",
+    label: "Changelog",
+    weight: 0.85,
+    note: "Per-version, usually terse",
+  },
+  {
+    tier: "official_docs",
+    label: "Documentation",
+    weight: 0.75,
+    note: "Current state, not the delta",
+  },
+  {
+    tier: "registry",
+    label: "Registry metadata",
+    weight: 0.6,
+    note: "Versions, dates, engines",
+  },
+  {
+    tier: "community",
+    label: "Issues & discussions",
+    weight: 0.35,
+    note: "Read last, never alone",
+  },
 ] as const;
 
 /** A stack trace as the fingerprinter sees it. */
 export const ERROR_FRAMES = [
-  { text: "TypeError: Cannot read properties of undefined (reading 'params')", kind: "head" },
+  {
+    text: "TypeError: Cannot read properties of undefined (reading 'params')",
+    kind: "head",
+  },
   { text: "at Page (app/products/[id]/page.tsx:14:22)", kind: "app" },
-  { text: "at renderWithHooks (node_modules/react-dom/cjs/react-dom.js:16305)", kind: "lib" },
-  { text: "at beginWork (node_modules/react-dom/cjs/react-dom.js:19073)", kind: "lib" },
-  { text: "at Object.invokeGuardedCallback (app/lib/render.ts:8:3)", kind: "app" },
+  {
+    text: "at renderWithHooks (node_modules/react-dom/cjs/react-dom.js:16305)",
+    kind: "lib",
+  },
+  {
+    text: "at beginWork (node_modules/react-dom/cjs/react-dom.js:19073)",
+    kind: "lib",
+  },
+  {
+    text: "at Object.invokeGuardedCallback (app/lib/render.ts:8:3)",
+    kind: "app",
+  },
 ] as const;
 
 export const ERROR_RESULT = {
   fingerprint: "typeerror:undefined-read:params",
   matched: "next · 15.0.0 · SIGNATURE_CHANGE",
-  quote: "params is now a Promise and must be awaited before its properties are read.",
+  quote:
+    "params is now a Promise and must be awaited before its properties are read.",
   source: "nextjs.org/docs · dynamic-apis",
 } as const;
 
@@ -504,6 +571,11 @@ export const RADIUS_RINGS = [
   {
     label: "Your source",
     note: "files that import a changed symbol",
-    nodes: ["app/layout.tsx", "app/page.tsx", "lib/fetcher.ts", "middleware.ts"],
+    nodes: [
+      "app/layout.tsx",
+      "app/page.tsx",
+      "lib/fetcher.ts",
+      "middleware.ts",
+    ],
   },
 ] as const;
