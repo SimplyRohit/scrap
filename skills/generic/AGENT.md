@@ -6,13 +6,14 @@ Two integration surfaces, same engine behind both.
 ## Setup
 
 ```bash
-cd <this repository> && bun link      # puts `rift` on PATH
+npm i -g riftcli             # puts `rift` on PATH
 rift stats                   # every capability should read `on`
 ```
 
-Credentials go in `~/.upgrade-intel/.env`, not a project `.env.local`: `bun`
-reads `.env.local` from the working directory, which is the wrong directory for
-a globally installed CLI. Real environment variables win over that file.
+Credentials go in `~/.upgrade-intel/.env`, not a project `.env.local`. A globally
+installed `rift` runs from whatever directory you happen to be in, so a
+per-project env file is the wrong place to put them. Real environment variables
+win over that file.
 
 ```
 BRIGHTDATA_API_KEY=...
