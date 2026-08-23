@@ -10,6 +10,37 @@ npx riftcli repo .            # what breaks here, and in which files
 npx riftcli error --package prisma --error "PrismaClientInitializationError: ..."
 ```
 
+No keys are needed. Vendor calls a key would pay for are borrowed from the
+deployment; the fetch cache, the extraction, and the index stay on the machine
+that ran the command, so nothing about the repository is sent anywhere. Set
+`RIFT_RELAY_URL=off` to refuse even that.
+
+## Three ways in
+
+Install it once and the command is `rift` — the npm name `riftcli` is not the
+command, because `rift` on npm belongs to someone else:
+
+```bash
+npm i -g riftcli
+rift repo . --fail-on HIGH    # exit 2 when something reaches HIGH, for CI
+```
+
+For an agent that speaks MCP, the same engine serves over stdio — arguments are
+typed, and a tool failure comes back as a result rather than a parse of stderr:
+
+```bash
+rift mcp
+```
+
+For Claude Code, install the skill and it will reach for `rift` on its own:
+
+```bash
+rift install-skill
+```
+
+Agents on other harnesses want [`skills/generic/AGENT.md`](skills/generic/AGENT.md),
+which documents the same engine over HTTP.
+
 ## Shape of the thing
 
 ```
@@ -43,7 +74,14 @@ bunx convex env set GITHUB_TOKEN …           # raises the GitHub rate limit
 ```
 
 Without them the engine still works — it fetches directly, skips discovery, and
-ranks lexically rather than failing. `GET /api/index` reports what is configured.
+ranks lexically rather than failing.
+
+`GET /api/index` reports which are configured. It is served by Convex, at the
+`.convex.site` host — `NEXT_PUBLIC_CONVEX_SITE_URL` in `.env.local` after
+`convex dev`, and the deployment's own host in production. The marketing site
+keeps only the three relay routes and repository correlation, so asking it for
+`/api/index` is a 404 rather than an answer. `rift stats` reports the same thing
+for a local install.
 
 ## Why the backend is Convex
 
