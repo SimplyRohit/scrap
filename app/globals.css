@@ -60,6 +60,9 @@
   --animate-marquee: marquee var(--marquee-duration, 40s) linear infinite;
   --animate-blink: blink 1.6s steps(1) infinite;
   --animate-drift: drift 3.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  /* One pass of the pipeline. Slow on purpose: it is a diagram, not a loader. */
+  --animate-flow: flow var(--flow-duration, 9s) linear infinite;
+  --animate-packet: packet var(--flow-duration, 9s) linear infinite;
 }
 
 :root {
@@ -291,6 +294,46 @@
     color: oklch(0.93 0.005 85);
   }
 
+  /* The one lit edge on the console, so the surface reads as a screen. */
+  .console-screen {
+    background:
+      linear-gradient(to bottom, oklch(1 0 0 / 0.045), transparent 120px),
+      var(--console);
+  }
+
+  /* A row of output, dim until you read it. */
+  .console-row {
+    transition: background-color 0.2s ease;
+  }
+  .console-row:hover {
+    background-color: oklch(1 0 0 / 0.03);
+  }
+
+  /* ─── A current running the length of a drawn path ──
+     The lit segment is a dash; `--len` is measured from the real path at mount,
+     the same way `.draw` does it, because a guessed length either stutters or
+     never arrives. */
+  .flow-current {
+    stroke-dasharray: 46 calc(var(--len, 1200) * 1px);
+    stroke-dashoffset: calc(var(--len, 1200) * 1px + 46px);
+    animation: var(--animate-flow);
+  }
+
+  /* The packet itself, riding the same path. */
+  .flow-packet {
+    offset-path: var(--flow-path);
+    offset-rotate: 0deg;
+    animation: var(--animate-packet);
+  }
+
+  /* A stage, lit for as long as the packet is inside it. The packet is drawn
+     behind the boxes — a dot sitting on top of a card reads as a smudge — so
+     this is what keeps the motion continuous while it is out of sight. */
+  .stage-lit {
+    opacity: 0;
+    animation: stage-lit var(--flow-duration, 9s) linear infinite;
+  }
+
   /* ─── Grid cell that warms on hover ────────────── */
   .cell {
     transition:
@@ -507,6 +550,46 @@
   }
 }
 
+/* The lit segment travelling from the first stage to the last. */
+@keyframes flow {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The packet fades in as it leaves INPUT and out as it reaches OUTPUT, so the
+   loop has no visible seam. */
+@keyframes packet {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  6%,
+  94% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+/* Held on either side by a short ramp, so a stage warms and cools rather than
+   switching. The window is roughly the time the packet spends crossing a box. */
+@keyframes stage-lit {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  2%,
+  9% {
+    opacity: 1;
+  }
+  12% {
+    opacity: 0;
+  }
+}
+
 /* The two halves of the mark, drifting apart and back. */
 @keyframes drift {
   0%,
@@ -532,8 +615,21 @@
   }
 
   .radius-pulse,
-  .pulse-dot::after {
+  .pulse-dot::after,
+  .flow-current,
+  .flow-packet,
+  .stage-lit {
     animation: none;
+  }
+
+  /* Without the animation the dash would freeze mid-path as a stray mark. */
+  .flow-current {
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+  .flow-packet {
+    opacity: 0;
   }
 
   *,

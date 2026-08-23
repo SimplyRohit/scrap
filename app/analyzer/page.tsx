@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import * as React from "react";
 
+import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { Analyzer } from "@/components/analyzer/analyzer";
 import { SITE } from "@/lib/marketing/site";
 import { buildBreadcrumbs } from "@/lib/marketing/structured-data";
@@ -32,7 +33,9 @@ export default function AnalyzerPage() {
         }}
       />
 
-      <Analyzer />
+      <ConvexClientProvider>
+        <Analyzer />
+      </ConvexClientProvider>
     </>
   );
 }

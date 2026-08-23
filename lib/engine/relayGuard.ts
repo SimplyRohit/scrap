@@ -12,7 +12,7 @@
  * that.
  */
 
-const WINDOW_MS = 60_000;
+export const WINDOW_MS = 60_000;
 
 /** Requests per caller per window, per instance. */
 const DEFAULT_LIMIT = 30;
@@ -24,7 +24,7 @@ interface Bucket {
 
 const buckets = new Map<string, Bucket>();
 
-function limit(): number {
+export function relayLimit(): number {
   const configured = Number(process.env.RIFT_RELAY_RATE_LIMIT);
   return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_LIMIT;
 }
@@ -62,7 +62,7 @@ export function checkRateLimit(key: string, now = Date.now()): GuardResult {
     return { allowed: true, retryAfterSeconds: 0 };
   }
 
-  if (bucket.count >= limit()) {
+  if (bucket.count >= relayLimit()) {
     return { allowed: false, retryAfterSeconds: Math.ceil((bucket.resetAt - now) / 1000) };
   }
 

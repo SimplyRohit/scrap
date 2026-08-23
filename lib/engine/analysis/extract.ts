@@ -9,7 +9,8 @@
  * prose — it cannot introduce a claim that has no quoted source.
  */
 
-import { normalizeForHash, shortHash } from '../hash';
+import { shortHash } from '../hash';
+import { normalizeForHash } from '../text';
 import {
   BREAKING_TYPES,
   severityForType,

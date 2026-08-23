@@ -118,7 +118,9 @@ export function toBlastRadiusAnalysis(analysis: ManifestResearchResult): FullBla
     for (const source of result.trace.fetched) {
       totalSources++;
       if (source.fromCache) cacheHits++;
-      else if (source.transport === 'brightdata') unlockedSources++;
+      // `relay` is the same unlocker spending the deployment's key rather than
+      // the caller's. Who paid differs; what was unlocked does not.
+      else if (source.transport === 'brightdata' || source.transport === 'relay') unlockedSources++;
 
       trace.push(
         `${result.package}: ${source.fromCache ? 'cache' : source.transport} · ${source.sourceType} · ${source.extracted} claim(s) · ${source.url}`,

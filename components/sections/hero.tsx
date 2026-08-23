@@ -13,6 +13,7 @@ const FACTS = [
   ["Sources per package", "6"],
   ["Assertion threshold", "0.75"],
   ["Ecosystems", "npm · PyPI"],
+  ["Retrieval", "Bright Data"],
 ] as const;
 
 export function Hero() {
@@ -77,6 +78,20 @@ export function Hero() {
             className="group flex items-center gap-2 text-[13.5px] text-muted-foreground transition-colors hover:text-foreground"
           >
             <span className="link-underline">See how it works</span>
+          </a>
+        </Reveal>
+
+        <Reveal delay={200} className="mt-6">
+          <a
+            href="https://brightdata.com/products/web-unlocker"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="group inline-flex items-center gap-2.5 border border-border bg-panel px-3 py-2 transition-colors hover:border-foreground/30"
+          >
+            <span aria-hidden className="size-1.5 bg-mark" />
+            <span className="label text-muted-foreground transition-colors group-hover:text-foreground">
+              Documentation retrieved with Bright Data Web Unlocker
+            </span>
           </a>
         </Reveal>
       </Container>

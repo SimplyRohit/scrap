@@ -49,6 +49,19 @@ export function Evidence() {
               confidence — which is why a forum thread can corroborate a finding but can
               never assert one on its own.
             </p>
+            <p className="mt-4 max-w-md text-[14.5px] leading-relaxed text-muted-foreground">
+              A tier is only worth its weight if the page can be read at all. Hosts that
+              refuse automated requests are fetched through{" "}
+              <a
+                href="https://brightdata.com/products/web-unlocker"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="link-underline text-foreground"
+              >
+                Bright Data
+              </a>
+              , so a 403 costs a transport hop rather than a citation.
+            </p>
           </Reveal>
 
           <Reveal delay={80}>

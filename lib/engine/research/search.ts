@@ -8,6 +8,7 @@
 
 import * as cheerio from 'cheerio';
 
+import { serpConfigured } from '../capabilities';
 import { brightDataError, tryFetchDocument } from './fetcher';
 import { classifySource } from './sources';
 import type { SourceType } from '../knowledge';
@@ -23,9 +24,8 @@ export interface SearchResult {
 
 const SERP_ENDPOINT = 'https://api.brightdata.com/request';
 
-export function serpConfigured(): boolean {
-  return Boolean(process.env.BRIGHTDATA_API_KEY && (process.env.BRIGHTDATA_SERP_ZONE ?? process.env.BRIGHTDATA_ZONE));
-}
+// Re-exported for callers that already import search to ask whether it will run.
+export { serpConfigured };
 
 /**
  * Bright Data SERP. Returns [] when unconfigured rather than throwing: search is

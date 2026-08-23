@@ -59,6 +59,15 @@ export async function embedQuery(text: string): Promise<number[] | null> {
   }
 }
 
+/**
+ * True when this object's vector is missing or was produced by a different
+ * model. A vector from another model is worse than none: it scores.
+ */
+export function needsEmbedding(knowledge: { embedding: number[] | null; embeddingModel?: string }, model: string): boolean {
+  if (!knowledge.embedding) return true;
+  return (knowledge.embeddingModel ?? '') !== model;
+}
+
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) return 0;
 

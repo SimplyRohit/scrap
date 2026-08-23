@@ -9,6 +9,7 @@
 
 import { hashBody, isFresh, readCache, revalidationHeaders, writeCache, type CacheEntry } from './cache';
 import type { SourceType } from '../knowledge';
+import { brightDataConfigured } from '../capabilities';
 import { relayConfigured, relayPost, relayUnavailable } from '../relay';
 
 const BRIGHTDATA_ENDPOINT = 'https://api.brightdata.com/request';
@@ -50,9 +51,8 @@ export class FetchError extends Error {
   }
 }
 
-export function brightDataConfigured(): boolean {
-  return Boolean(process.env.BRIGHTDATA_API_KEY);
-}
+// Re-exported for callers that already import the fetcher to ask what it can do.
+export { brightDataConfigured };
 
 type Route = 'direct' | 'brightdata' | 'relay';
 

@@ -18,6 +18,17 @@ export function SiteFooter() {
               cited — one sentence at a time.
             </p>
             <p className="label mt-5 text-foreground/35">MIT · self-hosted · no account</p>
+            <p className="label mt-2 text-foreground/35">
+              Retrieval through{" "}
+              <a
+                href="https://brightdata.com"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="link-underline transition-colors hover:text-foreground"
+              >
+                Bright Data
+              </a>
+            </p>
           </Reveal>
 
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">

@@ -105,9 +105,7 @@ export async function recordFixOutcome(report: FixReport): Promise<FeedbackResul
   const reinforced = await reinforce(store, report.derivedFrom ?? [], succeeded, report.repository);
 
   const fingerprint = fixFingerprint(report.package, report.summary, errorFingerprint);
-  const existing = (await store.all()).find(
-    (item) => item.package === report.package && item.fingerprint === fingerprint,
-  );
+  const existing = await store.findByFingerprint(report.package, fingerprint);
 
   const priorValidation = existing?.validation;
   const reporter = repositoryKey(report.repository);

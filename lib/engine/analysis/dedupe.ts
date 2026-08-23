@@ -7,7 +7,7 @@
  * sources as evidence, and confidence is rescored over the merged set.
  */
 
-import { tokenSimilarity } from '../hash';
+import { tokenSimilarity } from '../text';
 import { isInWindow } from '../semver';
 import type { KnowledgeObject, Provenance, SourceRef } from '../knowledge';
 import { SEVERITY_ORDER, sourcePriority } from '../knowledge';

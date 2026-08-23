@@ -7,9 +7,11 @@
  * object is current.
  */
 
-import { knowledgeText, type KnowledgeObject } from '../knowledge';
-import { embedAll, getEmbedder } from './embeddings';
+import { knowledgeText } from '../knowledge';
+import { embedAll, getEmbedder, needsEmbedding } from './embeddings';
 import { getStore, type KnowledgeStore } from './store';
+
+export { needsEmbedding };
 
 export interface BackfillOptions {
   store?: KnowledgeStore;
@@ -39,15 +41,6 @@ export interface BackfillResult {
 /** Objects per provider call. The provider batches internally too; this bounds
  * how much work is lost when one request fails. */
 const CHUNK = 32;
-
-/**
- * True when this object's vector is missing or was produced by a different
- * model. A vector from another model is worse than none: it scores.
- */
-export function needsEmbedding(knowledge: KnowledgeObject, model: string): boolean {
-  if (!knowledge.embedding) return true;
-  return (knowledge.embeddingModel ?? '') !== model;
-}
 
 export async function backfillEmbeddings(options: BackfillOptions = {}): Promise<BackfillResult> {
   const embedder = getEmbedder();

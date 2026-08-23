@@ -19,6 +19,8 @@ export const HERO_STATS = [
 export type ConsoleLine =
   | { kind: "prompt"; text: string }
   | { kind: "meta"; label: string; text: string }
+  /** A fetch that only succeeded because it was unlocked. */
+  | { kind: "unlock"; host: string; status: string; text: string }
   | { kind: "rule" }
   | { kind: "summary"; pkg: string; range: string; risk: RiskLevel; score: string; breaking: string }
   | { kind: "finding"; severity: RiskLevel; category: string; title: string }
@@ -30,7 +32,8 @@ export const CONSOLE_LINES: ConsoleLine[] = [
   { kind: "prompt", text: "rift migrate next --from 13.4.19 --to 14.2.0" },
   { kind: "meta", label: "index", text: "no coverage for this window, researching" },
   { kind: "meta", label: "registry", text: "npm · resolved 14.2.0" },
-  { kind: "meta", label: "sources", text: "6 planned · 6 read · 0 failed · 2 from cache" },
+  { kind: "unlock", host: "nextjs.org/docs/…/upgrading", status: "403", text: "unlocked" },
+  { kind: "meta", label: "sources", text: "6 planned · 6 read · 2 unlocked · 2 from cache" },
   { kind: "rule" },
   {
     kind: "summary",
@@ -89,7 +92,8 @@ export const EVIDENCE_STEPS = [
 
 export const PIPELINE_STAGES = [
   { label: "INPUT", detail: "manifest, package, error" },
-  { label: "RESEARCH", detail: "registry → releases" },
+  // The one stage that leaves the machine, and the one that needs help doing it.
+  { label: "RESEARCH", detail: "registry → releases → docs", note: "Bright Data" },
   { label: "NORMALIZE", detail: "HTML → section tree" },
   { label: "KNOWLEDGE", detail: "quote-anchored objects" },
   { label: "INDEX", detail: "BM25 + version filter" },
@@ -234,36 +238,86 @@ export const FINDINGS = [
 export const SURFACES = [
   {
     index: "01",
-    name: "CLI",
+    name: "Website",
     status: "Shipping",
     summary:
-      "Fifteen commands, every one of them with --json, because the first consumer of this output is a coding agent and the second is CI.",
+      "Paste a manifest, read the answer. The analyzer runs the same pipeline the CLI does and streams each package in as it lands, rather than making you wait for the slowest one.",
+    points: [
+      "Dashboard — what breaks, and how badly",
+      "Sources — every page, and how it was fetched",
+      "Report — Markdown, ready to paste into a PR",
+    ],
+    code: "localhost:3000/analyzer",
+  },
+  {
+    index: "02",
+    name: "Terminal",
+    status: "Shipping",
+    summary:
+      "Fifteen commands, every one of them with --json, because the first consumer of this output is a coding agent and the second is CI. Everything else is built on this surface.",
     points: [
       "package · migrate · error · repo",
       "search · index · graph · sources",
       "backfill · prune · reindex · report",
       "mcp · stats · install-skill",
-      "--fail-on gates the build",
     ],
-    code: "rift repo . --fail-on HIGH",
-  },
-  {
-    index: "02",
-    name: "HTTP API",
-    status: "Shipping",
-    summary:
-      "Eleven routes over the same engine, plus three that lend the deployment's API keys to a CLI that has none. /api/search only ever answers from the index; research is a separate, explicit call.",
-    points: ["/api/parse · /api/analyze", "/api/errors/analyze", "/api/agent/resolve · report"],
-    code: "POST /api/analyze  { dependencies }",
+    code: "rift repo .",
   },
   {
     index: "03",
+    name: "HTTP API",
+    status: "Shipping",
+    summary:
+      "Twelve routes over the same engine, plus three that lend the deployment's Bright Data and Voyage keys to a caller with none. /api/search only ever answers from the index; research is a separate, explicit call.",
+    points: [
+      "/api/parse · /api/analyze",
+      "/api/errors/analyze · /api/graph",
+      "/api/agent/resolve · report",
+      "Served from the deployment, not the web server",
+    ],
+    code: "POST …convex.site/api/analyze",
+  },
+  {
+    index: "04",
+    name: "MCP",
+    status: "Shipping",
+    summary:
+      "The best door for an agent: six typed tools over stdio, no shell and no parsing. A failure comes back as data rather than as an exit code it has to guess at.",
+    points: [
+      "search_knowledge — what do we already know?",
+      "analyze_error — why did this break?",
+      "research_upgrade — what will this bump break?",
+      "correlate_repository — which of my files use it?",
+      "package_graph — which version fixes this?",
+      "report_fix — that worked, remember it",
+    ],
+    code: "claude mcp add rift -- rift mcp",
+  },
+  {
+    index: "05",
     name: "Agent skill",
     status: "Shipping",
     summary:
-      "A skill for Claude Code and a harness-agnostic AGENT.md, so an agent can research a package, apply the migration, then report whether it actually worked.",
-    points: ["skills/upgrade-intelligence", "skills/generic/AGENT.md", "Write-back on verified fixes"],
+      "Not a new door — instructions that teach an agent when to open one, and how to read what comes back. A Claude Code skill, and a harness-agnostic AGENT.md for everything else.",
+    points: [
+      "skills/upgrade-intelligence",
+      "skills/generic/AGENT.md",
+      "Research, apply, then report whether it worked",
+    ],
     code: "rift report --package next --summary ...",
+  },
+  {
+    index: "06",
+    name: "CI gate",
+    status: "Shipping",
+    summary:
+      "One flag turns the engine into a pass/fail check, because a build needs a number rather than a table. Start at CRITICAL so day one is quiet, then tighten it.",
+    points: [
+      "exit 0 — fine",
+      "exit 1 — something went wrong, reason on stderr",
+      "exit 2 — risk hit your threshold",
+    ],
+    code: "rift repo . --fail-on HIGH --json",
   },
 ] as const;
 
@@ -292,16 +346,16 @@ export const RULES = [
 
 export const LIMITS = [
   {
-    title: "Retrieval is lexical",
-    body: "An error phrased differently from the changelog will not match yet. The embedder seam is defined; no embedder is registered.",
+    title: "Semantic retrieval needs a key",
+    body: "With one, an error phrased nothing like the changelog still matches. Without one, ranking falls back to BM25 and the wording has to line up.",
   },
   {
     title: "Extraction is deterministic",
     body: "It classifies by heading, commit prefix, and prose pattern. It will not summarise or infer a migration the source never states.",
   },
   {
-    title: "Correlation is regex, not AST",
-    body: "Re-exports, aliased imports, and dynamic access are missed. Treat affected files as a strong lead, not a proof.",
+    title: "Not every usage site is parsed",
+    body: "A site marked parsed came from the module graph and can be trusted. One marked textual is a lead — open the file before you edit it.",
   },
 ] as const;
 
@@ -315,8 +369,20 @@ export const FAQS = [
     a: "From the document that was actually fetched. Sources are ranked by authority — registry metadata, official releases, changelogs, migration guides, then issues — and the quote stored with a finding is the sentence it was extracted from, not a paraphrase.",
   },
   {
+    q: "What happens when a documentation site blocks you?",
+    a: "It gets read anyway. Registries and GitHub answer plain requests, but a lot of documentation and changelog hosts return 403 to anything automated — and a source that cannot be fetched is a claim that cannot be cited. Those go through Bright Data's Web Unlocker, and the trace records which transport each source arrived on, so you can see exactly which findings depended on it. Search discovery uses the same account's SERP zone.",
+  },
+  {
     q: "Does it call an LLM?",
     a: "Not for extraction. The pipeline is deterministic end to end, which is why a finding can always be traced back to a sentence. There is a documented seam for a model pass that may improve wording, but it may not introduce claims.",
+  },
+  {
+    q: "Does the index follow me between projects?",
+    a: "Yes, and that is the point. What gets indexed is knowledge about a package, not about a repository, so it lives in ~/.upgrade-intel and every repo on the machine reads the same index. Solve a chalk error once and the next project already knows. A project that wants its own index opts in by creating a local .upgrade-intel directory.",
+  },
+  {
+    q: "What happens when it is not confident?",
+    a: "It stops short of telling you what to do. Below 0.75 confidence a finding is a hypothesis, so you get the diagnosis, the evidence, and a caveat — not a migration to apply. An agent reading the JSON sees the same threshold and is instructed to treat it the same way.",
   },
   {
     q: "What does it cost to run?",
