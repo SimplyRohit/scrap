@@ -99,6 +99,22 @@ async function fetchDirect(
   return { status: response.status, body: response.status === 304 ? '' : await response.text(), headers: response.headers };
 }
 
+/**
+ * Bright Data's failure mode that looks like success.
+ *
+ * A misspelled, disabled, or deleted zone comes back as HTTP 200 with an empty
+ * body; the real status is a 407 reported only in `x-brd-err-code`. Checking
+ * `response.ok` therefore reads a broken account as a page with no content —
+ * which is exactly how a wrong zone name survived undetected long enough to
+ * make every search return nothing and every answer rest on one domain.
+ */
+export function brightDataError(headers: Headers): string | undefined {
+  const code = headers.get('x-brd-err-code');
+  if (!code) return undefined;
+  const message = headers.get('x-brd-err-msg') ?? headers.get('x-brd-error') ?? 'unknown error';
+  return `${code}: ${message}`;
+}
+
 async function fetchViaBrightData(
   url: string,
   timeoutMs: number,
@@ -121,6 +137,11 @@ async function fetchViaBrightData(
   if (!response.ok) {
     throw new FetchError(`Bright Data request failed (${response.status}): ${body.slice(0, 200)}`, url, response.status);
   }
+
+  // Checked after `ok`, because this is the case `ok` cannot see.
+  const reported = brightDataError(response.headers);
+  if (reported) throw new FetchError(`Bright Data rejected the request — ${reported}`, url, 502);
+
   return { status: 200, body, headers: response.headers };
 }
 

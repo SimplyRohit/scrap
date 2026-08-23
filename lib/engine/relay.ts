@@ -20,12 +20,12 @@
 /**
  * Origin used when `RIFT_RELAY_URL` is unset.
  *
- * `null` until the site is deployed under a domain we own. Pointing it at a
- * guess would add a failed round trip to every fetch on a keyless run, which is
- * strictly worse than having no relay at all. Set it to the deployed origin and
- * publish; nothing else has to change.
+ * This is what makes `npm i -g riftcli` enough on its own: with no keys and no
+ * configuration, the first command still reaches a SERP zone and an embedding
+ * model. A caller who sets their own keys never touches it, and
+ * `RIFT_RELAY_URL=off` refuses it outright.
  */
-const DEFAULT_RELAY_URL: string | null = null;
+const DEFAULT_RELAY_URL: string | null = 'https://rift-cli.vercel.app';
 
 /** Per-request ceiling. The relay is a courtesy, not a long-poll endpoint. */
 export const RELAY_TIMEOUT_MS = 30_000;
@@ -40,9 +40,29 @@ export const RELAY_TIMEOUT_MS = 30_000;
 export function relayOrigin(): string | undefined {
   const explicit = process.env.RIFT_RELAY_URL?.trim();
   if (explicit === 'off') return undefined;
-  const chosen = explicit || DEFAULT_RELAY_URL;
+  const chosen = explicit || (defaultAllowed ? DEFAULT_RELAY_URL : null);
   if (!chosen) return undefined;
   return chosen.replace(/\/+$/, '');
+}
+
+/**
+ * Whether the built-in default may be used.
+ *
+ * Off until an entry point turns it on, for the same reason embeddings are:
+ * anything importing the engine as a library — the test suite above all — must
+ * not acquire a network dependency because a constant happened to be compiled
+ * in. Setting `RIFT_RELAY_URL` is an explicit request and bypasses this; the
+ * default is the one that has to be asked for.
+ */
+let defaultAllowed = false;
+
+export function allowDefaultRelay(): void {
+  defaultAllowed = true;
+}
+
+/** Test seam. */
+export function denyDefaultRelay(): void {
+  defaultAllowed = false;
 }
 
 export function relayConfigured(): boolean {

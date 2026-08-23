@@ -10,11 +10,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { relayConfigured, relayOrigin, resetRelayAvailability } from '../relay';
+import { allowDefaultRelay, denyDefaultRelay, relayConfigured, relayOrigin, resetRelayAvailability } from '../relay';
+import { brightDataError } from '../research/fetcher';
 import { checkRelayTarget } from '../relayTarget';
 import { checkRateLimit, resetRateLimits, callerKey } from '../relayGuard';
 import { fetchDocument } from '../research/fetcher';
-import { searchWeb } from '../research/search';
+import { resetSearchWarnings, searchWeb } from '../research/search';
 
 const realFetch = globalThis.fetch;
 const temporaries: string[] = [];
@@ -39,6 +40,7 @@ beforeEach(async () => {
 
   resetRateLimits();
   resetRelayAvailability();
+  denyDefaultRelay();
 });
 
 afterEach(async () => {
@@ -79,9 +81,54 @@ describe('relayOrigin', () => {
   });
 
   test('"off" opts out even when a default would otherwise apply', () => {
+    allowDefaultRelay();
     process.env.RIFT_RELAY_URL = 'off';
     expect(relayOrigin()).toBeUndefined();
     expect(relayConfigured()).toBe(false);
+  });
+
+  /**
+   * The compiled-in default is what makes `npm i -g riftcli` enough on its own,
+   * and it is also a network dependency nobody asked for. Importing the engine
+   * as a library must not acquire one — that is what runs the test suite
+   * against a live deployment and makes it slow, flaky, and dependent on
+   * somebody's Vercel bill.
+   */
+  test('the built-in default is off until an entry point allows it', () => {
+    expect(relayOrigin()).toBeUndefined();
+    allowDefaultRelay();
+    expect(relayOrigin()).toBe('https://rift-cli.vercel.app');
+  });
+
+  test('an explicit RIFT_RELAY_URL does not need the default to be allowed', () => {
+    process.env.RIFT_RELAY_URL = 'https://other.example.com';
+    expect(relayOrigin()).toBe('https://other.example.com');
+  });
+});
+
+/**
+ * Bright Data answers a misspelled, disabled, or deleted zone with HTTP 200 and
+ * an empty body. `response.ok` is true, so a plain status check reads a broken
+ * account as a page with no content — which is how a wrong zone name survived
+ * long enough to make every search return nothing.
+ */
+describe('brightDataError', () => {
+  test('reads the error a 200 was hiding', () => {
+    const headers = new Headers({
+      'x-brd-err-code': 'client_10002',
+      'x-brd-err-msg': 'Authentication failed: zone not found.',
+    });
+    expect(brightDataError(headers)).toBe('client_10002: Authentication failed: zone not found.');
+  });
+
+  test('falls back to x-brd-error when no message is given', () => {
+    expect(brightDataError(new Headers({ 'x-brd-err-code': 'client_10002', 'x-brd-error': 'Zone not found' }))).toBe(
+      'client_10002: Zone not found',
+    );
+  });
+
+  test('a working response reports nothing', () => {
+    expect(brightDataError(new Headers({ 'x-brd-status-code': '200' }))).toBeUndefined();
   });
 });
 
@@ -249,6 +296,35 @@ describe('search through the relay', () => {
   test('no relay and no SERP zone stays an empty result, not an error', async () => {
     stubFetch(() => new Response('should not be called', { status: 500 }));
     expect(await searchWeb('anything')).toEqual([]);
+  });
+
+  test('a broken SERP zone is reported, not silently read as no results', async () => {
+    process.env.BRIGHTDATA_API_KEY = 'key';
+    process.env.BRIGHTDATA_SERP_ZONE = 'misspelled';
+    resetSearchWarnings();
+
+    stubFetch(
+      () =>
+        new Response('', {
+          status: 200,
+          headers: { 'x-brd-err-code': 'client_10002', 'x-brd-err-msg': 'zone not found' },
+        }),
+    );
+
+    const warnings: string[] = [];
+    const realWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string) => {
+      warnings.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+
+    try {
+      expect(await searchWeb('anything')).toEqual([]);
+    } finally {
+      process.stderr.write = realWrite;
+    }
+
+    expect(warnings.join('')).toContain('client_10002');
   });
 
   test('a failing relay degrades to no discovery rather than throwing', async () => {
