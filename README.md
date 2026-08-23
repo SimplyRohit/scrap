@@ -15,10 +15,11 @@ deployment; the fetch cache, the extraction, and the index stay on the machine
 that ran the command, so nothing about the repository is sent anywhere. Set
 `RIFT_RELAY_URL=off` to refuse even that.
 
-## Three ways in
+## Installation
+*Three ways in:*
 
-Install it once and the command is `rift` — the npm name `riftcli` is not the
-command, because `rift` on npm belongs to someone else:
+Install it once and **the command is** `rift` — the npm name `riftcli` is not the
+command, since `rift` on npm belongs to someone else:
 
 ```bash
 npm i -g riftcli
@@ -55,7 +56,8 @@ fetched documents are cached, and which embedder is registered. The CLI fills th
 first two with the filesystem and works offline. The deployment fills them with
 Convex.
 
-## Running it
+## How to run
+
 
 ```bash
 bun install
@@ -102,8 +104,8 @@ one per warm serverless instance.
 
 ## Documentation
 
-- [`lib/engine/README.md`](lib/engine/README.md) — the engine, its design rules,
-  and its known limitations
+- [`lib/engine/README.md`](lib/engine/README.md) — the engine, design rules,
+  and known limitations.
 - [`convex/README.md`](convex/README.md) — the backend, and how research is
   scheduled
 - `gen.md` — the specification everything above is numbered against
@@ -117,5 +119,4 @@ bun run lint
 ```
 
 Retrieval of blocked documentation hosts is powered by
-[Bright Data](https://brightdata.com); semantic retrieval by
-[Voyage AI](https://voyageai.com).
+[Bright Data](https://brightdata.com); 
