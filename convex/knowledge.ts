@@ -11,7 +11,6 @@ import { ConvexError, v } from 'convex/values';
 
 import { internalMutation, internalQuery, query } from './_generated/server';
 import * as Knowledge from './model/knowledge';
-import { categorize, confidenceCaveat } from '../lib/engine/analysis/confidence';
 import { brightDataConfigured, githubConfigured, serpConfigured } from '../lib/engine/capabilities';
 import { knowledgeObject, knowledgePatch, scoredKnowledge, searchQuery } from './validators';
 
@@ -23,43 +22,6 @@ export const search = query({
       throw new ConvexError('Provide `text` or `package` — search will not scan the whole index.');
     }
     return Knowledge.searchKnowledge(ctx, args);
-  },
-});
-
-/**
- * Search with the caveat attached.
- *
- * The extra shaping the old `POST /api/search` did — confidence category, the
- * caveat that stops a low-confidence hit being read as fact, and what to do when
- * nothing is indexed — belongs to the API rather than to the ranker.
- */
-export const searchWithConfidence = query({
-  args: searchQuery,
-  returns: v.object({
-    results: v.array(scoredKnowledge),
-    confidence: v.number(),
-    confidenceCategory: v.string(),
-    caveat: v.union(v.null(), v.string()),
-    recommendedAction: v.array(v.string()),
-    sources: v.array(v.string()),
-  }),
-  handler: async (ctx, args) => {
-    if (!args.text?.trim() && !args.package) {
-      throw new ConvexError('Provide `text` or `package` — search will not scan the whole index.');
-    }
-
-    const results = await Knowledge.searchKnowledge(ctx, args);
-    const confidence = results[0]?.knowledge.confidence ?? 0;
-
-    return {
-      results,
-      confidence,
-      confidenceCategory: categorize(confidence),
-      caveat: confidenceCaveat(confidence),
-      recommendedAction:
-        results.length === 0 ? ['Run research.packageUpgrade to index this package first'] : [],
-      sources: results.flatMap(({ knowledge }) => knowledge.sources.map((source) => source.url)),
-    };
   },
 });
 

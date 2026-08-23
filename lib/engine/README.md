@@ -81,7 +81,8 @@ Two consequences shape this directory:
 | `research.packageUpgrade` | `POST /api/research`, `POST /api/index` | Research one package upgrade, index the result |
 | `analyses.start`, `.get`, `.blastRadius` | `POST /api/analyze`, `GET /api/analyses?id=` | Research a whole manifest; see below |
 | `research.scrape` | `POST /api/scrape` | Acquisition only, no analysis |
-| `knowledge.search`, `.searchWithConfidence` | `POST /api/search` | Hybrid retrieval over the index. Never scrapes |
+| `search.withConfidenceScores` | `POST /api/search` | Hybrid retrieval over the index. Never scrapes |
+| `knowledge.search` | — | The lexical half, which the store unions with vector neighbours |
 | `knowledge.stats` | `GET /api/index` | Index statistics and capability report |
 | `embeddings.runBackfill` | `POST /api/index {"action":"backfill"}` | Embed indexed knowledge that has no current vector |
 | `graph.forPackage` | `GET /api/graph?package=` | Package knowledge graph (section 10) |

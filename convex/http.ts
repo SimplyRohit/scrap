@@ -201,7 +201,9 @@ http.route({
   path: '/api/search',
   method: 'POST',
   handler: route(async (ctx, body) =>
-    ctx.runQuery(api.knowledge.searchWithConfidence, {
+    // An action, not a query: retrieval here is hybrid, and Convex reaches the
+    // vector index from actions only.
+    ctx.runAction(api.search.withConfidenceScores, {
       text: body.text ?? body.query,
       package: body.package,
       ecosystem: body.ecosystem,
