@@ -373,13 +373,14 @@ export async function runStdioServer(): Promise<void> {
   initializeEngine();
 
   const decoder = new TextDecoder();
-  const reader = Bun.stdin.stream().getReader();
+  // `process.stdin` rather than `Bun.stdin`: the published bundle has to run
+  // under plain `node` too, and a host that launches this with npx gets
+  // "Bun is not defined" before the handshake. Async iteration over the stream
+  // behaves the same on both runtimes.
   let buffer = '';
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  for await (const chunk of process.stdin) {
+    buffer += decoder.decode(chunk as Uint8Array, { stream: true });
 
     let newline = buffer.indexOf('\n');
     while (newline !== -1) {
