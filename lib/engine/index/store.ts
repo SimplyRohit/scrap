@@ -11,7 +11,7 @@
  * means implementing this interface and nothing else.
  */
 
-import { readFile, writeFile, rename } from 'node:fs/promises';
+import { readFile, writeFile, rename, stat } from 'node:fs/promises';
 
 import { contentTokens, tokenize } from '../hash';
 import {
@@ -109,19 +109,47 @@ const EMPTY_INDEX: IndexFile = { version: 1, updatedAt: null, knowledge: [] };
 
 export class JsonKnowledgeStore implements KnowledgeStore {
   private cache: IndexFile | null = null;
+  /** Identifies the file revision `cache` was read from. Null means "never read". */
+  private cacheStamp: string | null = null;
   /** Serializes read-modify-write cycles so concurrent requests cannot lose entries. */
   private writeQueue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly filePath: string = indexFile()) {}
 
+  /**
+   * Cheap identity for the file on disk. One `stat` per operation buys the
+   * cross-process correctness a `writeQueue` cannot: that queue only orders
+   * writes inside *this* process.
+   */
+  private async stamp(): Promise<string | null> {
+    try {
+      const info = await stat(this.filePath);
+      return `${info.mtimeMs}:${info.size}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Re-reads whenever the file has moved on.
+   *
+   * Caching until process exit is fine for a CLI, which lives for a second. The
+   * MCP server lives for hours, and it held whatever the index looked like when
+   * it started: knowledge added by the CLI meanwhile was invisible to the agent,
+   * and — far worse — its next write serialised that stale snapshot back over
+   * the file, deleting everything written in between. Reproduced before fixing.
+   */
   private async load(): Promise<IndexFile> {
-    if (this.cache) return this.cache;
+    const stamp = await this.stamp();
+    if (this.cache && stamp === this.cacheStamp) return this.cache;
+
     try {
       const raw = await readFile(this.filePath, 'utf8');
       this.cache = JSON.parse(raw) as IndexFile;
     } catch {
       this.cache = { ...EMPTY_INDEX, knowledge: [] };
     }
+    this.cacheStamp = stamp;
     return this.cache;
   }
 
@@ -131,6 +159,10 @@ export class JsonKnowledgeStore implements KnowledgeStore {
     const temporary = `${this.filePath}.${process.pid}.tmp`;
     await writeFile(temporary, JSON.stringify(index, null, 2), 'utf8');
     await rename(temporary, this.filePath);
+
+    // Adopt what we just wrote, or the next `load` re-reads our own output.
+    this.cache = index;
+    this.cacheStamp = await this.stamp();
   }
 
   async upsert(objects: KnowledgeObject[]): Promise<UpsertResult> {

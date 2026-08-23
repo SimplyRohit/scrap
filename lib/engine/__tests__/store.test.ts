@@ -253,3 +253,37 @@ describe('removal', () => {
     expect((await store.stats()).lastUpdated).toBe(before);
   });
 });
+
+describe('two processes sharing one index file', () => {
+  // Two store instances on the same path stand in for a long-lived `rift mcp`
+  // server and a short-lived CLI run. The MCP server used to cache the index
+  // until it exited, so it served a snapshot from startup and, on its next
+  // write, put that snapshot back over the file — deleting whatever the CLI had
+  // added in between.
+  async function pair() {
+    const directory = await mkdtemp(path.join(tmpdir(), 'upgrade-intel-shared-'));
+    temporaries.push(directory);
+    const file = path.join(directory, 'index.json');
+    return [new JsonKnowledgeStore(file), new JsonKnowledgeStore(file)] as const;
+  }
+
+  test('a write from one is not erased by a later write from the other', async () => {
+    const [longLived, shortLived] = await pair();
+
+    await longLived.all(); // the long-lived reader caches an empty index
+    await shortLived.upsert([knowledge({ id: 'k_from_cli', fingerprint: 'fp_cli' })]);
+    await longLived.upsert([knowledge({ id: 'k_from_mcp', fingerprint: 'fp_mcp' })]);
+
+    const ids = (await longLived.all()).map((item) => item.id).sort();
+    expect(ids).toEqual(['k_from_cli', 'k_from_mcp']);
+  });
+
+  test('a reader sees what the other process wrote after it loaded', async () => {
+    const [reader, writer] = await pair();
+
+    await reader.all();
+    await writer.upsert([knowledge({ id: 'k_late', fingerprint: 'fp_late' })]);
+
+    expect((await reader.all()).map((item) => item.id)).toEqual(['k_late']);
+  });
+});
