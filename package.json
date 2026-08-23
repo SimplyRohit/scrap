@@ -49,6 +49,7 @@
     "unrs-resolver"
   ],
   "bin": {
-    "upgrade-intel": "./cli/index.ts"
+    "upgrade-intel": "./cli/index.ts",
+    "blast-radius": "./cli/index.ts"
   }
 }
