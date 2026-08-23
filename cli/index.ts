@@ -8,11 +8,11 @@
  */
 
 import { writeStdout } from '../lib/stdout';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { boolFlag, numberFlag, parseArgs, stringFlag, type ParsedArgs } from './args';
 import {
@@ -52,6 +52,7 @@ import {
   renderRepositoryImpactDocument,
 } from '../lib/engine/output/markdown';
 import { researchManifest, researchPackageUpgrade, type PackageResearchResult } from '../lib/engine/pipeline';
+import { runStdioServer } from '../lib/mcp/server';
 import { relayConfigured, relayOrigin } from '../lib/engine/relay';
 import { voyageConfigured } from '../lib/engine/index/voyage';
 import { brightDataConfigured } from '../lib/engine/research/fetcher';
@@ -739,9 +740,16 @@ async function commandReindex(args: ParsedArgs): Promise<number> {
  * Serves the engine over MCP (gen.md section 18).
  *
  * stdout belongs to the protocol from here on, so nothing else may print to it.
+ *
+ * Imported statically. As a dynamic import this was the only edge into the MCP
+ * server, so the bundler emitted every module below it twice — once inlined for
+ * the static graph and once lazily for this one — and the two copies did not
+ * share module state. `registerEmbedder` wrote to one embedder registry while
+ * `getEmbedder` read the other, `getStore` returned two different index caches,
+ * and the relay's default stayed off because a different copy had been switched
+ * on. Nothing was saved by deferring it: the code is in the bundle either way.
  */
 async function commandMcp(): Promise<number> {
-  const { runStdioServer } = await import('../lib/mcp/server');
   await runStdioServer();
   return 0;
 }
@@ -831,9 +839,30 @@ async function flushStdout(): Promise<void> {
   });
 }
 
-// `import.meta.main` is true only when executed directly, so the module stays
-// importable from tests without running the CLI.
-if (import.meta.main) {
+/**
+ * Whether this file is the process entry point, rather than an import.
+ *
+ * Not `import.meta.main`: that is a Bun extension, and bundling for Node turns
+ * it into a `__require` reference that only exists when the output also
+ * contains a CommonJS module. With every dependency external the bundle is pure
+ * ESM, the shim is absent, and the published binary died on its first line with
+ * `ReferenceError: __require is not defined`.
+ *
+ * The entry is resolved through `realpathSync` because an installed CLI is
+ * reached through a symlink in `node_modules/.bin`, and comparing the link path
+ * against this module's real URL never matches.
+ */
+function isEntryPoint(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href;
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
   run(process.argv.slice(2))
     .then(async (code) => {
       await flushStdout();

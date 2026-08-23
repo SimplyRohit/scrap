@@ -13,36 +13,48 @@ Findings below 75% confidence are hypotheses, not facts.
 
 ## Setup
 
-The `rift` command must be on `PATH`, and it must find its credentials
-from whatever directory you are working in.
-
 ```bash
-npm i -g riftcli             # puts `rift` on PATH
+npm i -g riftcli             # puts `rift` on PATH; needs Node 20+
 rift stats                   # verify
 ```
 
-`stats` prints a capability block. Every line should read `on`:
+No keys are required. `stats` prints a capability block, and each line reads one
+of three states:
 
 ```
-on   brightData        page fetching
-on   brightDataSerp    web search discovery
-on   github            5000 API calls/hour instead of 60
-on   embeddings        semantic search
+on     brightData        a local key — your own quota
+relay  brightDataSerp    borrowed from the deployed site
+off    github            unavailable
 ```
 
-Anything `off` means a missing key. Keys live in `~/.upgrade-intel/.env`, not in
-a project `.env.local`. A globally installed `rift` runs from whatever directory
-you happen to be in, so a per-project env file is the wrong place to put them:
+**`relay` is working, not broken.** Do not stop to configure anything when you
+see it. The vendor calls are made by the deployment; the fetch cache, the
+extraction, and the index all stay on this machine.
+
+`off` costs coverage, never correctness:
+
+| Capability | Without it |
+| --- | --- |
+| `brightData` | Plain fetches. Documentation hosts serve those fine; a blocking host is lost |
+| `brightDataSerp` | No discovery. Migration guides are found only at predictable URLs |
+| `github` | 60 API calls an hour instead of 5000 |
+| `embeddings` | Keyword retrieval only — see the `search` rule below |
+
+To spend your own quota instead of the relay's, put keys in
+`~/.upgrade-intel/.env`. Not a project `.env.local`: a globally installed `rift`
+runs from whatever directory you happen to be in.
 
 ```
 BRIGHTDATA_API_KEY=...
+BRIGHTDATA_ZONE=...          # Web Unlocker zone; optional, docs rarely block
 BRIGHTDATA_SERP_ZONE=...     # the SERP zone name from the Bright Data dashboard
 GITHUB_TOKEN=...             # no scopes needed; public reads only
 VOYAGE_API_KEY=...           # semantic search; lexical-only without it
+RIFT_RELAY_URL=off           # never contact the deployment at all
 ```
 
-Real environment variables win over that file, so CI and a shell export behave
-the way they read.
+A local key always wins over the relay. Real environment variables win over the
+file, so CI and a shell export behave the way they read.
 
 ### Where the index lives
 
@@ -50,6 +62,12 @@ the way they read.
 knowledge about *packages*, not about one project, so an error diagnosed in one
 repository is already answered in the next. A project overrides this by creating
 its own `.upgrade-intel/` directory, or by setting `UPGRADE_INTEL_DATA_DIR`.
+
+On a fresh machine it is empty, so the first command on a package researches
+from scratch and is slow. That is expected once per package, not a fault. If the
+home directory cannot be written — a read-only container, a serverless host —
+the cache silently degrades to no caching rather than failing the run, and every
+fetch goes to the network.
 
 ## When upgrading a dependency
 
@@ -147,16 +165,23 @@ your work.
 ## Other commands
 
 ```bash
+rift package <name> --from <version>                # research the jump to latest
 rift search "<query>" --package <p> --version <v>   # index only, never scrapes
 rift sources <package>                              # what would be researched
-rift index <package> --from <version>               # warm the index
+rift index <package> --from <version>               # warm the index, print no report
 rift graph <package> [--version <v>]                # what each version broke and what fixed it
 rift backfill                                       # embed indexed knowledge for semantic search
 rift prune                                          # list index entries the current rules reject
 rift reindex [package]                              # re-extract cached documents under current rules
 rift stats                                          # index size, capabilities
 rift mcp                                            # serve the engine over MCP on stdio
+rift install-skill                                  # copy this skill into ~/.claude/skills
 ```
+
+`package` and `migrate` differ only in the endpoint: `package` researches the
+jump to whatever the registry calls latest, `migrate` researches a window you
+name. `index` does the same work as `package` and prints nothing — use it to
+warm the index before a batch of queries.
 
 `reindex` re-reads what is already in the fetch cache and re-extracts it under
 today's rules. Use it after the extraction rules change; it costs no network and
