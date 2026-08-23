@@ -27,6 +27,7 @@ import type * as model_knowledgeStore from "../model/knowledgeStore.js";
 import type * as relay from "../relay.js";
 import type * as relayLimits from "../relayLimits.js";
 import type * as research from "../research.js";
+import type * as search from "../search.js";
 import type * as validators from "../validators.js";
 
 import type {
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   relay: typeof relay;
   relayLimits: typeof relayLimits;
   research: typeof research;
+  search: typeof search;
   validators: typeof validators;
 }>;
 
