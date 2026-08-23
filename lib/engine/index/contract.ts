@@ -56,7 +56,11 @@ export interface KnowledgeStore {
   remove(ids: string[]): Promise<number>;
   stats(): Promise<IndexStats>;
   /** True when this package/version pair already has indexed knowledge (gen.md section 23). */
-  hasCoverage(packageName: string, version?: string): Promise<boolean>;
+  hasCoverage(
+    packageName: string,
+    version?: string,
+    ecosystem?: KnowledgeObject['ecosystem'],
+  ): Promise<boolean>;
 }
 
 /** Aggregates statistics over a full index. */
@@ -82,9 +86,26 @@ export function summarize(knowledge: KnowledgeObject[], lastUpdated: string | nu
   };
 }
 
-/** Coverage test (gen.md section 23), shared so every store answers it identically. */
-export function coversVersion(item: KnowledgeObject, packageName: string, version?: string): boolean {
+/**
+ * Coverage test (gen.md section 23), shared so every store answers it identically.
+ *
+ * `ecosystem` is optional and, when given, decisive. A package name is not an
+ * identity: `requests` is an HTTP library on npm and a different HTTP library on
+ * PyPI, and `pydantic` is a Python package whose npm entry is an empty security
+ * placeholder. Keyed on the name alone this answered "already indexed" for a
+ * package it had never seen, and research then served the other ecosystem's
+ * changelog as evidence. Omitting it still matches anything, because a name the
+ * user typed into `rift search` has no manifest behind it to say which registry
+ * it came from.
+ */
+export function coversVersion(
+  item: KnowledgeObject,
+  packageName: string,
+  version?: string,
+  ecosystem?: KnowledgeObject['ecosystem'],
+): boolean {
   if (item.package.toLowerCase() !== packageName.toLowerCase()) return false;
+  if (ecosystem && item.ecosystem !== ecosystem) return false;
   if (!version) return true;
   return matchesVersion(item, version);
 }

@@ -132,9 +132,13 @@ export async function researchPackageUpgrade(
   reportProgress({ kind: 'package-target', package: ref.name, from: ref.currentVersion, to: targetVersion ?? null });
 
   // Incremental indexing (gen.md section 23): reuse what we already know.
-  if (!refresh && targetVersion && (await store.hasCoverage(ref.name, targetVersion))) {
+  // `ref.ecosystem` is passed to both, and it is the whole fix: a name alone
+  // matched `requests` on PyPI for a request about `requests` on npm, and then
+  // returned that package's changelog as this one's evidence.
+  if (!refresh && targetVersion && (await store.hasCoverage(ref.name, targetVersion, ref.ecosystem))) {
     const existing = await store.search({
       package: ref.name,
+      ecosystem: ref.ecosystem,
       version: targetVersion,
       limit: 100,
     });

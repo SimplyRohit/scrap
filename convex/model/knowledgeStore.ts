@@ -137,7 +137,11 @@ export class ConvexKnowledgeStore implements KnowledgeStore {
     return stats;
   }
 
-  async hasCoverage(packageName: string, version?: string): Promise<boolean> {
-    return this.ctx.runQuery(internal.knowledge.hasCoverage, { package: packageName, version });
+  async hasCoverage(
+    packageName: string,
+    version?: string,
+    ecosystem?: KnowledgeObject['ecosystem'],
+  ): Promise<boolean> {
+    return this.ctx.runQuery(internal.knowledge.hasCoverage, { package: packageName, version, ecosystem });
   }
 }

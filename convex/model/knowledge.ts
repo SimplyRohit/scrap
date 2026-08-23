@@ -211,13 +211,18 @@ async function selectCandidates(ctx: QueryCtx, query: SearchQuery): Promise<Doc<
 }
 
 /** True when this package/version pair already has indexed knowledge. */
-export async function hasCoverage(ctx: QueryCtx, packageName: string, version?: string): Promise<boolean> {
+export async function hasCoverage(
+  ctx: QueryCtx,
+  packageName: string,
+  version?: string,
+  ecosystem?: KnowledgeObject['ecosystem'],
+): Promise<boolean> {
   const docs = await ctx.db
     .query('knowledge')
     .withIndex('by_package', (q) => q.eq('packageKey', packageKeyOf(packageName)))
     .take(COVERAGE_PROBE_LIMIT);
 
-  return docs.some((doc) => coversVersion(fromDoc(doc), packageName, version));
+  return docs.some((doc) => coversVersion(fromDoc(doc), packageName, version, ecosystem));
 }
 
 /**
