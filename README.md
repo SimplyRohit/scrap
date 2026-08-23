@@ -6,8 +6,8 @@ against its own changelogs, release notes, and migration guides — and every
 finding comes back with the sentence it was found in.
 
 ```bash
-npx riftcli repo .            # what breaks here, and in which files
-npx riftcli error --package prisma --error "PrismaClientInitializationError: ..."
+rift repo . --fail-on HIGH --markdown > repo_report.md            # what breaks here, and in which files
+rift error --package prisma --error "PrismaClientInitializationError: ..."
 ```
 
 No keys are needed. Vendor calls a key would pay for are borrowed from the
@@ -23,7 +23,7 @@ command, since `rift` on npm belongs to someone else:
 
 ```bash
 npm i -g riftcli
-rift repo . --fail-on HIGH    # exit 2 when something reaches HIGH, for CI
+rift repo . --fail-on HIGH --markdown > repo_report.md    # exit 2 when something reaches HIGH, for CI
 ```
 
 For an agent that speaks MCP, the same engine serves over stdio — arguments are
