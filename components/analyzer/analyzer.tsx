@@ -12,7 +12,6 @@ import { ManifestInput, Spinner } from "@/components/analyzer/manifest-input";
 import { ReportExporter } from "@/components/analyzer/report-exporter";
 import { ResearchTrace } from "@/components/analyzer/research-trace";
 import { Reveal } from "@/components/ui/reveal";
-import { PRESET_MANIFESTS } from "@/lib/presets";
 import { type DependencyRiskReport } from "@/lib/types";
 
 export function Analyzer() {
@@ -60,8 +59,6 @@ export function Analyzer() {
     progress != null && progress.status !== "complete" && progress.status !== "failed";
   const isLoading = isStarting || isResearching;
 
-  // Stable identity so the mount effect below can depend on it honestly
-  // rather than suppressing the dependency check.
   const run = React.useCallback(
     async (content: string, fileName: string) => {
       setIsStarting(true);
@@ -89,18 +86,6 @@ export function Analyzer() {
     },
     [parseManifest, startAnalysis],
   );
-
-  // Load the first preset once, so the dashboard has something to show.
-  // Deferred by a tick because `run` sets loading state synchronously, which is
-  // not allowed directly inside an effect body.
-  React.useEffect(() => {
-    const timer = setTimeout(
-      () => run(PRESET_MANIFESTS[0].content, PRESET_MANIFESTS[0].fileName),
-      0,
-    );
-
-    return () => clearTimeout(timer);
-  }, [run]);
 
   return (
     <div className="flex grow flex-col">
