@@ -120,3 +120,6 @@ bun run lint
 
 Retrieval of blocked documentation hosts is powered by
 [Bright Data](https://brightdata.com); 
+
+## Demo Video 
+https://www.youtube.com/embed/BqoGMN8tMuw
